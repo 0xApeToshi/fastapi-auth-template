@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Dict, Optional, Tuple
+from typing import Tuple
 
 from fastapi import HTTPException, status
 from jose import JWTError, jwt
@@ -10,7 +10,6 @@ from app.models.user import User
 from app.repositories.token import TokenRepository
 from app.repositories.user import UserRepository
 from app.services.user import UserService
-from app.schemas.token import TokenPayload
 
 
 class AuthService:
@@ -112,14 +111,15 @@ class AuthService:
                     headers={"WWW-Authenticate": "Bearer"},
                 )
             
-            # Blacklist the old refresh token
-            token_data = jwt.decode(
-                refresh_token, 
-                settings.SECRET_KEY, 
-                algorithms=[settings.ALGORITHM]
-            )
-            expires_at = datetime.fromtimestamp(token_data.get("exp"))
-            await self.token_repository.blacklist(refresh_token, expires_at)
+            # Blacklist the old refresh token (check if not already blacklisted)
+            if not await self.token_repository.is_blacklisted(refresh_token):
+                token_data = jwt.decode(
+                    refresh_token, 
+                    settings.SECRET_KEY, 
+                    algorithms=[settings.ALGORITHM]
+                )
+                expires_at = datetime.fromtimestamp(token_data.get("exp"))
+                await self.token_repository.blacklist(refresh_token, expires_at)
             
             # Generate new tokens
             new_access_token = create_access_token(user_id)
@@ -156,6 +156,14 @@ class AuthService:
             HTTPException: If token is invalid
         """
         try:
+            # Check if token is already blacklisted
+            if await self.token_repository.is_blacklisted(token):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token already invalidated",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            
             # Verify the token
             payload = await verify_token(token)
             user_id = int(payload.get("sub"))
