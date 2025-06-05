@@ -26,6 +26,7 @@ from sqlalchemy import delete
 from app.db.base import Base
 from app.db.session import AsyncSessionLocal, engine
 from app.models.user import BlacklistedToken, User
+
 # Import seed functions
 from scripts.seed_admin import create_admin
 from scripts.seed_test_users import create_test_users, list_users

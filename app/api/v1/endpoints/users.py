@@ -2,8 +2,11 @@ from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
-from app.api.dependencies import (get_current_active_user,
-                                  get_current_admin_user, get_user_service)
+from app.api.dependencies import (
+    get_current_active_user,
+    get_current_admin_user,
+    get_user_service,
+)
 from app.models.user import User
 from app.schemas.user import User as UserSchema
 from app.schemas.user import UserCreate, UserUpdate
