@@ -1,12 +1,9 @@
 from typing import Annotated, List
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
-from app.api.dependencies import (
-    get_current_active_user,
-    get_current_admin_user,
-    get_user_service,
-)
+from app.api.dependencies import (get_current_active_user,
+                                  get_current_admin_user, get_user_service)
 from app.models.user import User
 from app.schemas.user import User as UserSchema
 from app.schemas.user import UserCreate, UserUpdate
@@ -22,14 +19,14 @@ async def create_user(
 ) -> User:
     """
     Create new user.
-    
+
     Args:
         user_in: User creation data
         user_service: UserService instance
-        
+
     Returns:
         Created user
-        
+
     Raises:
         HTTPException: If email already registered
     """
@@ -42,14 +39,14 @@ async def get_current_user_profile(
 ) -> User:
     """
     Get current user profile.
-    
+
     Requires authentication using JWT token - either via:
     1. Bearer token in the Authorization header
     2. OAuth2 password flow
-    
+
     Args:
         current_user: Current authenticated user
-        
+
     Returns:
         Current user profile
     """
@@ -64,15 +61,15 @@ async def update_current_user_profile(
 ) -> User:
     """
     Update current user profile.
-    
+
     Args:
         user_in: User update data
         current_user: Current authenticated user
         user_service: UserService instance
-        
+
     Returns:
         Updated user profile
-        
+
     Notes:
         Regular users can't change their own role
     """
@@ -82,7 +79,7 @@ async def update_current_user_profile(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot change your own role",
         )
-    
+
     return await user_service.update(current_user.id, user_in)
 
 
@@ -91,17 +88,19 @@ async def list_users(
     user_service: Annotated[UserService, Depends(get_user_service)],
     _: Annotated[User, Depends(get_current_admin_user)],  # Only admins can list users
     skip: int = Query(0, ge=0, description="Number of users to skip"),
-    limit: int = Query(100, ge=1, le=100, description="Maximum number of users to return"),
+    limit: int = Query(
+        100, ge=1, le=100, description="Maximum number of users to return"
+    ),
 ) -> List[User]:
     """
     List all users.
-    
+
     Args:
         skip: Number of users to skip
         limit: Maximum number of users to return
         _: Current admin user (for authorization)
         user_service: UserService instance
-        
+
     Returns:
         List of users
     """
@@ -111,20 +110,22 @@ async def list_users(
 @router.get("/{user_id}", response_model=UserSchema)
 async def get_user(
     user_service: Annotated[UserService, Depends(get_user_service)],
-    _: Annotated[User, Depends(get_current_admin_user)],  # Only admins can get user details
+    _: Annotated[
+        User, Depends(get_current_admin_user)
+    ],  # Only admins can get user details
     user_id: int = Path(..., gt=0, description="User ID"),
 ) -> User:
     """
     Get user by ID.
-    
+
     Args:
         user_id: User ID
         _: Current admin user (for authorization)
         user_service: UserService instance
-        
+
     Returns:
         User details
-        
+
     Raises:
         HTTPException: If user not found
     """
@@ -140,16 +141,16 @@ async def update_user(
 ) -> User:
     """
     Update user.
-    
+
     Args:
         user_in: User update data
         user_id: User ID
         _: Current admin user (for authorization)
         user_service: UserService instance
-        
+
     Returns:
         Updated user
-        
+
     Raises:
         HTTPException: If user not found
     """
@@ -164,15 +165,15 @@ async def delete_user(
 ) -> User:
     """
     Delete user.
-    
+
     Args:
         user_id: User ID
         _: Current admin user (for authorization)
         user_service: UserService instance
-        
+
     Returns:
         Deleted user
-        
+
     Raises:
         HTTPException: If user not found
     """

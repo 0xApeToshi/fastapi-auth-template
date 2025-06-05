@@ -1,5 +1,3 @@
-from typing import Optional
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_password_hash
@@ -16,14 +14,14 @@ async def create_test_user(
 ) -> User:
     """
     Create a user in the database for testing.
-    
+
     Args:
         db: Database session
         email: User email
         password: Plain text password
         role: User role
         is_active: Whether the user is active
-        
+
     Returns:
         Created User object
     """
@@ -34,11 +32,11 @@ async def create_test_user(
         role=role,
         is_active=is_active,
     )
-    
+
     db.add(db_user)
     await db.commit()
     await db.refresh(db_user)
-    
+
     return db_user
 
 
@@ -50,13 +48,13 @@ async def get_user_auth_headers(
 ) -> dict:
     """
     Get authentication headers for a user.
-    
+
     Args:
         client: Test client
         email: User email
         password: User password
         api_prefix: API prefix (e.g. "/api/v1")
-        
+
     Returns:
         Dict with Authorization header
     """
@@ -65,9 +63,9 @@ async def get_user_auth_headers(
         "password": password,
     }
     response = await client.post(
-        f"{api_prefix}/auth/login", 
+        f"{api_prefix}/auth/login",
         data=login_data,
     )
     tokens = response.json()
-    
+
     return {"Authorization": f"Bearer {tokens['access_token']}"}

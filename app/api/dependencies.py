@@ -1,7 +1,8 @@
 from typing import Annotated, Optional
 
-from fastapi import Depends, HTTPException, status, Security
-from fastapi.security import OAuth2PasswordBearer, HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Depends, HTTPException, status
+from fastapi.security import (HTTPAuthorizationCredentials, HTTPBearer,
+                              OAuth2PasswordBearer)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -24,10 +25,10 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 async def get_user_repository(db: DbSession) -> UserRepository:
     """
     Dependency for UserRepository.
-    
+
     Args:
         db: Database session
-        
+
     Returns:
         UserRepository instance
     """
@@ -37,10 +38,10 @@ async def get_user_repository(db: DbSession) -> UserRepository:
 async def get_token_repository(db: DbSession) -> TokenRepository:
     """
     Dependency for TokenRepository.
-    
+
     Args:
         db: Database session
-        
+
     Returns:
         TokenRepository instance
     """
@@ -48,14 +49,14 @@ async def get_token_repository(db: DbSession) -> TokenRepository:
 
 
 async def get_user_service(
-    user_repository: Annotated[UserRepository, Depends(get_user_repository)]
+    user_repository: Annotated[UserRepository, Depends(get_user_repository)],
 ) -> UserService:
     """
     Dependency for UserService.
-    
+
     Args:
         user_repository: UserRepository instance
-        
+
     Returns:
         UserService instance
     """
@@ -69,12 +70,12 @@ async def get_auth_service(
 ) -> AuthService:
     """
     Dependency for AuthService.
-    
+
     Args:
         user_service: UserService instance
         user_repository: UserRepository instance
         token_repository: TokenRepository instance
-        
+
     Returns:
         AuthService instance
     """
@@ -82,14 +83,14 @@ async def get_auth_service(
 
 
 async def get_token_from_bearer(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(http_bearer)]
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(http_bearer)],
 ) -> str:
     """
     Extract token from HTTP Bearer authentication.
-    
+
     Args:
         credentials: HTTP Authorization credentials
-        
+
     Returns:
         JWT token
     """
@@ -99,18 +100,18 @@ async def get_token_from_bearer(
 # Support both OAuth2 password flow and explicit HTTP Bearer tokens
 async def get_token(
     oauth2_token: Annotated[str, Depends(oauth2_scheme)] = None,
-    bearer_token: Annotated[Optional[str], Depends(get_token_from_bearer)] = None
+    bearer_token: Annotated[Optional[str], Depends(get_token_from_bearer)] = None,
 ) -> str:
     """
     Get token from either OAuth2 or HTTP Bearer authentication.
-    
+
     Args:
         oauth2_token: Token from OAuth2 authentication
         bearer_token: Token from HTTP Bearer authentication
-        
+
     Returns:
         JWT token
-        
+
     Raises:
         HTTPException: If no token is provided
     """
@@ -131,11 +132,11 @@ async def get_current_user(
 ) -> User:
     """
     Dependency for current authenticated user.
-    
+
     Args:
         token: JWT token from request
         auth_service: AuthService instance
-        
+
     Returns:
         Current user
     """
@@ -147,13 +148,13 @@ async def get_current_active_user(
 ) -> User:
     """
     Dependency for current active user.
-    
+
     Args:
         current_user: Current authenticated user
-        
+
     Returns:
         Current active user
-        
+
     Raises:
         HTTPException: If user is inactive
     """
@@ -170,13 +171,13 @@ async def get_current_admin_user(
 ) -> User:
     """
     Dependency for current admin user.
-    
+
     Args:
         current_user: Current active user
-        
+
     Returns:
         Current admin user
-        
+
     Raises:
         HTTPException: If user is not an admin
     """

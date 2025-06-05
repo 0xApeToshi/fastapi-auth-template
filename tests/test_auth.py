@@ -1,5 +1,6 @@
-import pytest
 import asyncio
+
+import pytest
 from fastapi import status
 from httpx import AsyncClient
 
@@ -18,17 +19,17 @@ async def test_login(client: AsyncClient, test_db):
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
-    
+
     # Try to login
     login_data = {
         "username": user_data["email"],  # OAuth2 form uses username field
         "password": user_data["password"],
     }
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/login", 
+        f"{settings.API_V1_STR}/auth/login",
         data=login_data,
     )
-    
+
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert "access_token" in data
@@ -46,17 +47,17 @@ async def test_login_wrong_password(client: AsyncClient, test_db):
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
-    
+
     # Try to login with wrong password
     login_data = {
         "username": user_data["email"],
         "password": "wrong_password",
     }
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/login", 
+        f"{settings.API_V1_STR}/auth/login",
         data=login_data,
     )
-    
+
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
@@ -68,10 +69,10 @@ async def test_login_nonexistent_user(client: AsyncClient, test_db):
         "password": "password123",
     }
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/login", 
+        f"{settings.API_V1_STR}/auth/login",
         data=login_data,
     )
-    
+
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
     data = response.json()
     assert data["detail"] == "Incorrect email or password"
@@ -88,17 +89,17 @@ async def test_login_inactive_user(client: AsyncClient, test_db):
         "is_active": False,
     }
     await create_test_user(test_db, **user_data)
-    
+
     # Try to login
     login_data = {
         "username": user_data["email"],
         "password": user_data["password"],
     }
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/login", 
+        f"{settings.API_V1_STR}/auth/login",
         data=login_data,
     )
-    
+
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
     data = response.json()
     assert data["detail"] == "Inactive user"
@@ -109,14 +110,14 @@ async def test_login_missing_credentials(client: AsyncClient, test_db):
     """Test login with missing credentials."""
     # Missing password
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/login", 
+        f"{settings.API_V1_STR}/auth/login",
         data={"username": "test@example.com"},
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    
+
     # Missing username
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/login", 
+        f"{settings.API_V1_STR}/auth/login",
         data={"password": "password123"},
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -132,31 +133,32 @@ async def test_refresh_token(client: AsyncClient, test_db):
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
-    
+
     # Login to get tokens
     login_data = {
         "username": user_data["email"],
         "password": user_data["password"],
     }
     login_response = await client.post(
-        f"{settings.API_V1_STR}/auth/login", 
+        f"{settings.API_V1_STR}/auth/login",
         data=login_data,
     )
     tokens = login_response.json()
-    
+
     # Add a longer delay to ensure tokens are generated at different times
-    # JWT tokens include expiration time in seconds, so we need at least 1 second difference
+    # JWT tokens include expiration time in seconds,
+    # so we need at least 1 second difference
     await asyncio.sleep(1.1)
-    
+
     # Try to refresh tokens
     refresh_data = {
         "refresh_token": tokens["refresh_token"],
     }
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/refresh", 
+        f"{settings.API_V1_STR}/auth/refresh",
         json=refresh_data,
     )
-    
+
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert "access_token" in data
@@ -174,10 +176,10 @@ async def test_refresh_token_invalid(client: AsyncClient, test_db):
         "refresh_token": "invalid_token",
     }
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/refresh", 
+        f"{settings.API_V1_STR}/auth/refresh",
         json=refresh_data,
     )
-    
+
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
     data = response.json()
     assert data["detail"] == "Invalid refresh token"
@@ -193,26 +195,26 @@ async def test_refresh_token_with_access_token(client: AsyncClient, test_db):
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
-    
+
     login_data = {
         "username": user_data["email"],
         "password": user_data["password"],
     }
     login_response = await client.post(
-        f"{settings.API_V1_STR}/auth/login", 
+        f"{settings.API_V1_STR}/auth/login",
         data=login_data,
     )
     tokens = login_response.json()
-    
+
     # Try to refresh using access token instead of refresh token
     refresh_data = {
         "refresh_token": tokens["access_token"],  # Wrong token type
     }
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/refresh", 
+        f"{settings.API_V1_STR}/auth/refresh",
         json=refresh_data,
     )
-    
+
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
     data = response.json()
     assert data["detail"] == "Invalid token type"
@@ -228,32 +230,32 @@ async def test_refresh_token_reuse_after_refresh(client: AsyncClient, test_db):
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
-    
+
     login_data = {
         "username": user_data["email"],
         "password": user_data["password"],
     }
     login_response = await client.post(
-        f"{settings.API_V1_STR}/auth/login", 
+        f"{settings.API_V1_STR}/auth/login",
         data=login_data,
     )
     original_tokens = login_response.json()
-    
+
     await asyncio.sleep(1.1)
-    
+
     # First refresh - should work
     refresh_data = {
         "refresh_token": original_tokens["refresh_token"],
     }
     first_refresh_response = await client.post(
-        f"{settings.API_V1_STR}/auth/refresh", 
+        f"{settings.API_V1_STR}/auth/refresh",
         json=refresh_data,
     )
     assert first_refresh_response.status_code == status.HTTP_200_OK
-    
+
     # Try to use the same refresh token again - should fail
     second_refresh_response = await client.post(
-        f"{settings.API_V1_STR}/auth/refresh", 
+        f"{settings.API_V1_STR}/auth/refresh",
         json=refresh_data,
     )
     assert second_refresh_response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -269,34 +271,34 @@ async def test_logout(client: AsyncClient, test_db):
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
-    
+
     # Login to get tokens
     login_data = {
         "username": user_data["email"],
         "password": user_data["password"],
     }
     login_response = await client.post(
-        f"{settings.API_V1_STR}/auth/login", 
+        f"{settings.API_V1_STR}/auth/login",
         data=login_data,
     )
     tokens = login_response.json()
-    
+
     # Logout
     response = await client.post(
         f"{settings.API_V1_STR}/auth/logout",
         headers={"Authorization": f"Bearer {tokens['access_token']}"},
     )
-    
+
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert data["detail"] == "Successfully logged out"
-    
+
     # Try to use token after logout (should fail)
     me_response = await client.get(
         f"{settings.API_V1_STR}/users/me",
         headers={"Authorization": f"Bearer {tokens['access_token']}"},
     )
-    
+
     assert me_response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
@@ -307,7 +309,7 @@ async def test_logout_invalid_token(client: AsyncClient, test_db):
         f"{settings.API_V1_STR}/auth/logout",
         headers={"Authorization": "Bearer invalid_token"},
     )
-    
+
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
@@ -315,7 +317,7 @@ async def test_logout_invalid_token(client: AsyncClient, test_db):
 async def test_logout_missing_token(client: AsyncClient, test_db):
     """Test logout without token."""
     response = await client.post(f"{settings.API_V1_STR}/auth/logout")
-    
+
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
@@ -329,24 +331,24 @@ async def test_logout_twice(client: AsyncClient, test_db):
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
-    
+
     login_data = {
         "username": user_data["email"],
         "password": user_data["password"],
     }
     login_response = await client.post(
-        f"{settings.API_V1_STR}/auth/login", 
+        f"{settings.API_V1_STR}/auth/login",
         data=login_data,
     )
     tokens = login_response.json()
-    
+
     # First logout - should work
     first_logout = await client.post(
         f"{settings.API_V1_STR}/auth/logout",
         headers={"Authorization": f"Bearer {tokens['access_token']}"},
     )
     assert first_logout.status_code == status.HTTP_200_OK
-    
+
     # Second logout with same token - should fail with "Token already invalidated"
     second_logout = await client.post(
         f"{settings.API_V1_STR}/auth/logout",
@@ -367,39 +369,39 @@ async def test_multiple_logins_different_tokens(client: AsyncClient, test_db):
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
-    
+
     login_data = {
         "username": user_data["email"],
         "password": user_data["password"],
     }
-    
+
     # First login
     response1 = await client.post(
-        f"{settings.API_V1_STR}/auth/login", 
+        f"{settings.API_V1_STR}/auth/login",
         data=login_data,
     )
     tokens1 = response1.json()
-    
+
     await asyncio.sleep(1.1)  # Ensure different timestamps
-    
+
     # Second login
     response2 = await client.post(
-        f"{settings.API_V1_STR}/auth/login", 
+        f"{settings.API_V1_STR}/auth/login",
         data=login_data,
     )
     tokens2 = response2.json()
-    
+
     # Tokens should be different
     assert tokens1["access_token"] != tokens2["access_token"]
     assert tokens1["refresh_token"] != tokens2["refresh_token"]
-    
+
     # Both tokens should work
     me_response1 = await client.get(
         f"{settings.API_V1_STR}/users/me",
         headers={"Authorization": f"Bearer {tokens1['access_token']}"},
     )
     assert me_response1.status_code == status.HTTP_200_OK
-    
+
     me_response2 = await client.get(
         f"{settings.API_V1_STR}/users/me",
         headers={"Authorization": f"Bearer {tokens2['access_token']}"},

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
@@ -14,25 +14,26 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+
 # Custom OpenAPI schema with better JWT documentation
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
-        
+
     openapi_schema = get_openapi(
         title=app.title,
         version=app.version,
         description=app.description,
         routes=app.routes,
     )
-    
+
     # Define security schemes
     openapi_schema["components"]["securitySchemes"] = {
         "BearerAuth": {
             "type": "http",
             "scheme": "bearer",
             "bearerFormat": "JWT",
-            "description": "Enter your JWT token, e.g. `eyJhbGciOiJIUzI1...`"
+            "description": "Enter your JWT token, e.g. `eyJhbGciOiJIUzI1...`",
         },
         "OAuth2PasswordBearer": {
             "type": "oauth2",
@@ -42,9 +43,9 @@ def custom_openapi():
                     "scopes": {},
                 }
             },
-        }
+        },
     }
-    
+
     # Apply both security schemes to all operations (except login and open endpoints)
     # This ensures both authentication methods are available
     for path_key, path_item in openapi_schema["paths"].items():
@@ -54,13 +55,11 @@ def custom_openapi():
 
         for method, operation in path_item.items():
             # Add security requirement to use either Bearer or OAuth2
-            operation["security"] = [
-                {"BearerAuth": []},
-                {"OAuth2PasswordBearer": []}
-            ]
-            
+            operation["security"] = [{"BearerAuth": []}, {"OAuth2PasswordBearer": []}]
+
     app.openapi_schema = openapi_schema
     return app.openapi_schema
+
 
 app.openapi = custom_openapi
 
@@ -75,6 +74,7 @@ if settings.BACKEND_CORS_ORIGINS:
     )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
 
 @app.get("/health")
 async def health_check():

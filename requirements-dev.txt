@@ -18,3 +18,4 @@ certifi==2025.4.26
 httpcore==1.0.9
 httpx==0.28.1
 pytest-asyncio==1.0.0
+isort==6.0.1

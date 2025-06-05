@@ -1,7 +1,6 @@
-import asyncio
 import os
 import sys
-from typing import AsyncGenerator, Generator
+from typing import AsyncGenerator
 
 # Add the parent directory to the Python path to make 'app' importable
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -30,9 +29,9 @@ test_engine = create_async_engine(
 
 # Create async session factory
 TestAsyncSessionLocal = sessionmaker(
-    test_engine, 
-    class_=AsyncSession, 
-    expire_on_commit=False, 
+    test_engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
     autoflush=False,
 )
 
@@ -52,7 +51,7 @@ async def get_test_db() -> AsyncGenerator[AsyncSession, None]:
 async def test_db() -> AsyncGenerator[AsyncSession, None]:
     """
     Create a fresh database on each test case.
-    
+
     We use a separate fixture from `get_test_db` so that
     we can perform database setup before yielding the session.
     """

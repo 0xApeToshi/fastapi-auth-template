@@ -1,25 +1,26 @@
-from typing import Any, Dict, List, Optional, Union
-from pydantic import AnyHttpUrl, EmailStr, PostgresDsn, field_validator, model_validator
+from typing import List, Optional, Union
+
+from pydantic import AnyHttpUrl, PostgresDsn, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "User Management API"
-    
+
     # SECURITY
     SECRET_KEY: str  # Required, will raise error if not in environment
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30  # 30 minutes
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # 7 days
     ALGORITHM: str = "HS256"
-    
+
     # Password settings
     ARGON2_TIME_COST: int = 2
     ARGON2_MEMORY_COST: int = 102400
     ARGON2_PARALLELISM: int = 8
     ARGON2_HASH_LENGTH: int = 16
     ARGON2_SALT_LENGTH: int = 16
-    
+
     # CORS
     BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
 
@@ -43,14 +44,14 @@ class Settings(BaseSettings):
     POSTGRES_DB: str
     DATABASE_URI: Optional[PostgresDsn] = None
 
-    # Use model_validator instead of field_validator for complex validation across fields
-    @model_validator(mode='after')
-    def assemble_db_connection(self) -> 'Settings':
+    # Use model_validator instead of field_validator for complex validation across fields # noqa
+    @model_validator(mode="after")
+    def assemble_db_connection(self) -> "Settings":
         if not self.DATABASE_URI:
-            # Determine host and port from either POSTGRES_SERVER or POSTGRES_HOST/POSTGRES_PORT
+            # Determine host and port from either POSTGRES_SERVER or POSTGRES_HOST/POSTGRES_PORT # noqa
             host = None
             port = None
-            
+
             if self.POSTGRES_SERVER:
                 server_parts = self.POSTGRES_SERVER.split(":")
                 host = server_parts[0]
@@ -59,11 +60,13 @@ class Settings(BaseSettings):
                 host = self.POSTGRES_HOST
                 port = self.POSTGRES_PORT or "5432"
             else:
-                raise ValueError("Either POSTGRES_SERVER or POSTGRES_HOST must be provided")
-            
+                raise ValueError(
+                    "Either POSTGRES_SERVER or POSTGRES_HOST must be provided"
+                )
+
             # Convert port to integer
             port_int = int(port)
-            
+
             # Build the database URI
             self.DATABASE_URI = PostgresDsn.build(
                 scheme="postgresql+asyncpg",
@@ -71,7 +74,7 @@ class Settings(BaseSettings):
                 password=self.POSTGRES_PASSWORD,
                 host=host,
                 port=port_int,  # Pass as integer
-                path=self.POSTGRES_DB
+                path=self.POSTGRES_DB,
             )
         return self
 

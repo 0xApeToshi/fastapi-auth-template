@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.api.dependencies import get_auth_service, oauth2_scheme
@@ -17,14 +17,14 @@ async def login(
 ) -> Token:
     """
     Login user and obtain access and refresh tokens.
-    
+
     Args:
         form_data: OAuth2 password request form
         auth_service: AuthService instance
-        
+
     Returns:
         Token object with access and refresh tokens
-        
+
     Raises:
         HTTPException: If authentication fails
     """
@@ -33,7 +33,7 @@ async def login(
         password=form_data.password,
     )
     return Token(
-        access_token=access_token, 
+        access_token=access_token,
         refresh_token=refresh_token,
     )
 
@@ -45,14 +45,14 @@ async def refresh_token(
 ) -> Token:
     """
     Refresh access token using refresh token.
-    
+
     Args:
         refresh_request: Refresh token request
         auth_service: AuthService instance
-        
+
     Returns:
         Token object with new access and refresh tokens
-        
+
     Raises:
         HTTPException: If refresh token is invalid
     """
@@ -60,7 +60,7 @@ async def refresh_token(
         refresh_token=refresh_request.refresh_token,
     )
     return Token(
-        access_token=access_token, 
+        access_token=access_token,
         refresh_token=refresh_token,
     )
 
@@ -72,14 +72,14 @@ async def logout(
 ) -> dict:
     """
     Logout user by invalidating tokens.
-    
+
     Args:
         token: Access token
         auth_service: AuthService instance
-        
+
     Returns:
         Success message
-        
+
     Raises:
         HTTPException: If token is invalid
     """

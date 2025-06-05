@@ -3,7 +3,6 @@ from typing import Any, Dict, Optional, Union
 
 from jose import jwt
 from passlib.context import CryptContext
-from passlib.hash import argon2
 
 from app.core.config import settings
 
@@ -24,11 +23,11 @@ def create_access_token(
 ) -> str:
     """
     Create a JWT access token.
-    
+
     Args:
         subject: Token subject (usually user ID)
         expires_delta: Optional expiration time delta
-        
+
     Returns:
         Encoded JWT token
     """
@@ -38,7 +37,7 @@ def create_access_token(
         expire = datetime.utcnow() + timedelta(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
-    
+
     to_encode = {"exp": expire, "sub": str(subject), "type": "access"}
     encoded_jwt = jwt.encode(
         to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
@@ -51,21 +50,19 @@ def create_refresh_token(
 ) -> str:
     """
     Create a JWT refresh token with longer expiration.
-    
+
     Args:
         subject: Token subject (usually user ID)
         expires_delta: Optional expiration time delta
-        
+
     Returns:
         Encoded JWT refresh token
     """
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(
-            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
-        )
-    
+        expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+
     to_encode = {"exp": expire, "sub": str(subject), "type": "refresh"}
     encoded_jwt = jwt.encode(
         to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
@@ -76,11 +73,11 @@ def create_refresh_token(
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     Verify a password against a hash.
-    
+
     Args:
         plain_password: Password in plain text
         hashed_password: Hashed password
-        
+
     Returns:
         True if password matches hash
     """
@@ -90,10 +87,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def get_password_hash(password: str) -> str:
     """
     Hash a password using Argon2.
-    
+
     Args:
         password: Password in plain text
-        
+
     Returns:
         Hashed password
     """
@@ -103,16 +100,14 @@ def get_password_hash(password: str) -> str:
 async def verify_token(token: str) -> Dict[str, Any]:
     """
     Decode and verify a JWT token.
-    
+
     Args:
         token: JWT token to verify
-        
+
     Returns:
         Token payload if valid
-        
+
     Raises:
         JWTError: If token is invalid
     """
-    return jwt.decode(
-        token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
-    )
+    return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])

@@ -15,9 +15,9 @@ engine = create_async_engine(
 
 # Create sessionmaker for async sessions
 AsyncSessionLocal = sessionmaker(
-    engine, 
-    class_=AsyncSession, 
-    expire_on_commit=False, 
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
     autoflush=False,
 )
 
@@ -25,7 +25,7 @@ AsyncSessionLocal = sessionmaker(
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
     Dependency for database session.
-    
+
     Yields:
         AsyncSession: SQLAlchemy async session
     """
@@ -43,16 +43,17 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 class TransactionManager:
     """
     Context manager for transaction management.
-    
+
     Use this for operations that need to happen within a single transaction.
     """
+
     def __init__(self):
         self.session = None
-    
+
     async def __aenter__(self) -> AsyncSession:
         self.session = AsyncSessionLocal()
         return self.session
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if exc_type is not None:
             await self.session.rollback()
