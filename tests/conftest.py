@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -85,5 +85,7 @@ def test_app(override_get_db) -> FastAPI:
 @pytest_asyncio.fixture
 async def client(test_app) -> AsyncGenerator[AsyncClient, None]:
     """Create a test client for the app."""
-    async with AsyncClient(app=test_app, base_url="http://test") as client:
+    # Use ASGITransport for newer versions of httpx
+    transport = ASGITransport(app=test_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client

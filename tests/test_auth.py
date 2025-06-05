@@ -1,4 +1,5 @@
 import pytest
+import asyncio
 from fastapi import status
 from httpx import AsyncClient
 
@@ -80,6 +81,9 @@ async def test_refresh_token(client: AsyncClient, test_db):
         data=login_data,
     )
     tokens = login_response.json()
+    
+    # Add a small delay to ensure tokens are generated at different times
+    await asyncio.sleep(1.1)
     
     # Try to refresh tokens
     refresh_data = {
