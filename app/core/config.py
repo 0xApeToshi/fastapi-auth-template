@@ -29,16 +29,17 @@ class Settings(BaseSettings):
         """Parse CORS origins from string to list of URLs."""
         if not v:
             return []
-        
+
         # Handle both comma-separated and JSON array formats
         if v.startswith("[") and v.endswith("]"):
             # JSON array format: ["http://localhost:3000", "http://localhost:8000"]
             import json
+
             origins = json.loads(v)
         else:
             # Comma-separated format: http://localhost:3000,http://localhost:8000
             origins = [origin.strip() for origin in v.split(",") if origin.strip()]
-        
+
         # Convert to AnyHttpUrl objects
         return [AnyHttpUrl(origin) for origin in origins]
 

@@ -88,7 +88,8 @@ async def list_users():
         print("-" * 50)
 
         for user in users:
-            print(f"{user.id:<5} {user.email:<30} {user.role.value:<10} {'Yes' if user.is_active else 'No':<10}")  # noqa
+            text = f"{user.id:<5} {user.email:<30} {user.role.value:<10} {'Yes' if user.is_active else 'No':<10}"  # noqa
+            print(text)
 
 
 if __name__ == "__main__":
