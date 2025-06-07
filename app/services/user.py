@@ -2,7 +2,11 @@ from typing import List, Optional
 
 from fastapi import HTTPException, status
 
-from app.core.security import get_password_hash, verify_password
+from app.core.security import (
+    get_password_hash,
+    perform_constant_time_password_verification,
+    verify_password,
+)
 from app.models.user import User
 from app.repositories.user import UserRepository
 from app.schemas.user import UserCreate, UserUpdate
@@ -49,7 +53,7 @@ class UserService:
 
     async def authenticate(self, email: str, password: str) -> Optional[User]:
         """
-        Authenticate a user.
+        Authenticate a user with enhanced constant-time operations.
 
         Args:
             email: User email
@@ -59,11 +63,18 @@ class UserService:
             User object if authentication successful, None otherwise
         """
         user = await self.get_by_email(email)
-        if not user:
+
+        if user:
+            # Verify password for existing user
+            password_valid = verify_password(password, str(user.hashed_password))
+            # Return user only if password is valid AND user is active
+            if password_valid and user.is_active:
+                return user
             return None
-        if not verify_password(password, str(user.hashed_password)):
+        else:
+            # Perform dummy verification to maintain constant timing
+            perform_constant_time_password_verification(password)
             return None
-        return user
 
     async def list(self, skip: int = 0, limit: int = 100) -> List[User]:
         """

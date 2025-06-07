@@ -1,29 +1,41 @@
 from typing import Annotated, List
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.api.dependencies import (
     get_current_active_user,
     get_current_admin_user,
     get_user_service,
 )
+from app.core.config import settings
 from app.models.user import User
 from app.schemas.user import User as UserSchema
 from app.schemas.user import UserCreate, UserUpdate
 from app.services.user import UserService
 
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter()
 
 
 @router.post("/", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
+@limiter.limit(settings.RATE_LIMIT_REGISTER if not settings.TESTING else "1000/minute")
 async def create_user(
+    request: Request,
     user_in: UserCreate,
     user_service: Annotated[UserService, Depends(get_user_service)],
 ) -> User:
     """
     Create new user.
 
+    Rate limited to prevent spam registration.
+    Default: 3 attempts per minute per IP address.
+
     Args:
+        request: FastAPI request object (used for rate limiting)
         user_in: User creation data
         user_service: UserService instance
 
@@ -31,7 +43,7 @@ async def create_user(
         Created user
 
     Raises:
-        HTTPException: If email already registered
+        HTTPException: If email already registered or rate limit exceeded
     """
     return await user_service.create(user_in)
 
@@ -87,7 +99,11 @@ async def update_current_user_profile(
 
 
 @router.get("/", response_model=List[UserSchema])
+@limiter.limit(
+    settings.RATE_LIMIT_LIST_USERS if not settings.TESTING else "1000/minute"
+)
 async def list_users(
+    request: Request,
     user_service: Annotated[UserService, Depends(get_user_service)],
     _: Annotated[User, Depends(get_current_admin_user)],  # Only admins can list users
     skip: int = Query(0, ge=0, description="Number of users to skip"),
@@ -98,7 +114,11 @@ async def list_users(
     """
     List all users.
 
+    Rate limited to prevent enumeration attacks.
+    Default: 30 requests per minute per IP address.
+
     Args:
+        request: FastAPI request object (used for rate limiting)
         skip: Number of users to skip
         limit: Maximum number of users to return
         _: Current admin user (for authorization)

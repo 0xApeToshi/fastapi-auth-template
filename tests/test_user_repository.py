@@ -14,7 +14,7 @@ async def test_user_repository_create(test_db):
     user_repository = UserRepository(test_db)
 
     user_create = UserCreate(
-        email="test@example.com", password="password123", role=UserRole.REGULAR
+        email="test@example.com", password="TestPass1234!", role=UserRole.REGULAR
     )
 
     user = await user_repository.create(user_create, "hashed_password_123")
@@ -35,7 +35,7 @@ async def test_user_repository_get(test_db):
 
     # Create test user
     created_user = await create_test_user(
-        test_db, email="test@example.com", password="password123"
+        test_db, email="test@example.com", password="TestPass1234!"
     )
 
     # Get user by ID
@@ -62,7 +62,7 @@ async def test_user_repository_get_by_email(test_db):
     user_repository = UserRepository(test_db)
 
     # Create test user
-    await create_test_user(test_db, email="test@example.com", password="password123")
+    await create_test_user(test_db, email="test@example.com", password="TestPass1234!")
 
     # Get user by email
     user = await user_repository.get_by_email("test@example.com")
@@ -89,7 +89,7 @@ async def test_user_repository_list(test_db):
     # Create test users
     for i in range(5):
         await create_test_user(
-            test_db, email=f"user{i}@example.com", password="password123"
+            test_db, email=f"user{i}@example.com", password="TestPass1234!"
         )
 
     # List all users
@@ -116,7 +116,7 @@ async def test_user_repository_update(test_db):
 
     # Create test user
     user = await create_test_user(
-        test_db, email="test@example.com", password="password123"
+        test_db, email="test@example.com", password="TestPass1234!"
     )
     original_password = user.hashed_password
 
@@ -125,7 +125,7 @@ async def test_user_repository_update(test_db):
         email="updated@example.com",
         is_active=False,
         role=UserRole.ADMIN,
-        password="newpassword123",  # This triggers the hashed_password logic
+        password="NewTestPass1234!",  # This triggers the hashed_password logic
     )
 
     updated_user = await user_repository.update(
@@ -163,7 +163,10 @@ async def test_user_repository_update_partial(test_db):
 
     # Create test user
     user = await create_test_user(
-        test_db, email="test@example.com", password="password123", role=UserRole.REGULAR
+        test_db,
+        email="test@example.com",
+        password="TestPass1234!",
+        role=UserRole.REGULAR,
     )
 
     # Update only email
@@ -184,12 +187,12 @@ async def test_user_repository_update_password_only(test_db):
 
     # Create test user
     user = await create_test_user(
-        test_db, email="test@example.com", password="password123"
+        test_db, email="test@example.com", password="TestPass1234!"
     )
     original_password = user.hashed_password
 
     # Update password only
-    user_update = UserUpdate(password="newpassword123")
+    user_update = UserUpdate(password="NewTestPass1234!")
 
     updated_user = await user_repository.update(
         user.id, user_update, hashed_password="new_hashed_password"
@@ -211,7 +214,7 @@ async def test_user_repository_delete(test_db):
 
     # Create test user
     user = await create_test_user(
-        test_db, email="test@example.com", password="password123"
+        test_db, email="test@example.com", password="TestPass1234!"
     )
 
     # Delete user
@@ -241,15 +244,15 @@ async def test_user_repository_delete_not_found(test_db):
 
 @pytest.mark.asyncio
 async def test_user_repository_update_refresh_token(test_db):
-    """Test UserRepository update_refresh_token method."""
+    """Test UserRepository update_refresh_token method with hashing."""
     user_repository = UserRepository(test_db)
 
     # Create test user
     user = await create_test_user(
-        test_db, email="test@example.com", password="password123"
+        test_db, email="test@example.com", password="TestPass1234!"
     )
 
-    # Update refresh token
+    # Update refresh token - note: this will be hashed now
     refresh_token = "test_refresh_token_123"
     expires_at = datetime.utcnow() + timedelta(days=7)
 
@@ -259,10 +262,40 @@ async def test_user_repository_update_refresh_token(test_db):
 
     assert success is True
 
-    # Verify token was updated
+    # Verify token was updated and hashed
     updated_user = await user_repository.get(user.id)
-    assert updated_user.refresh_token == refresh_token
+    assert updated_user.refresh_token is not None
+    # The stored token should be hashed, not the original
+    assert updated_user.refresh_token != refresh_token
+    # But we should be able to verify it
+    assert await user_repository.verify_refresh_token(user.id, refresh_token) is True
     assert updated_user.refresh_token_expires_at == expires_at
+
+
+@pytest.mark.asyncio
+async def test_user_repository_verify_refresh_token(test_db):
+    """Test UserRepository verify_refresh_token method."""
+    user_repository = UserRepository(test_db)
+
+    # Create test user
+    user = await create_test_user(
+        test_db, email="test@example.com", password="TestPass1234!"
+    )
+
+    # Set refresh token
+    refresh_token = "test_refresh_token_456"
+    await user_repository.update_refresh_token(
+        user.id, refresh_token, datetime.utcnow() + timedelta(days=7)
+    )
+
+    # Verify correct token
+    assert await user_repository.verify_refresh_token(user.id, refresh_token) is True
+
+    # Verify wrong token
+    assert await user_repository.verify_refresh_token(user.id, "wrong_token") is False
+
+    # Verify for non-existent user
+    assert await user_repository.verify_refresh_token(999, refresh_token) is False
 
 
 @pytest.mark.asyncio
@@ -272,7 +305,7 @@ async def test_user_repository_update_refresh_token_clear(test_db):
 
     # Create test user with refresh token
     user = await create_test_user(
-        test_db, email="test@example.com", password="password123"
+        test_db, email="test@example.com", password="TestPass1234!"
     )
 
     # Set initial refresh token
@@ -311,7 +344,7 @@ async def test_user_repository_create_with_defaults(test_db):
     # Create user with minimal data (using defaults)
     user_create = UserCreate(
         email="minimal@example.com",
-        password="password123",
+        password="TestPass1234!",
         # No role specified - should default to REGULAR
         # No is_active specified - should default to True
     )
@@ -330,7 +363,7 @@ async def test_user_repository_create_admin(test_db):
 
     user_create = UserCreate(
         email="admin@example.com",
-        password="password123",
+        password="AdminPass123!",
         role=UserRole.ADMIN,
         is_active=True,
     )
@@ -348,7 +381,7 @@ async def test_user_repository_create_inactive(test_db):
     user_repository = UserRepository(test_db)
 
     user_create = UserCreate(
-        email="inactive@example.com", password="password123", is_active=False
+        email="inactive@example.com", password="InactivePass123!", is_active=False
     )
 
     user = await user_repository.create(user_create, "hashed_password")
@@ -376,7 +409,7 @@ async def test_user_repository_list_pagination_edge_cases(test_db):
     # Create 3 test users
     for i in range(3):
         await create_test_user(
-            test_db, email=f"user{i}@example.com", password="password123"
+            test_db, email=f"user{i}@example.com", password="TestPass1234!"
         )
 
     # Test skip beyond available records
@@ -403,7 +436,7 @@ async def test_user_repository_update_no_changes(test_db):
 
     # Create test user
     user = await create_test_user(
-        test_db, email="test@example.com", password="password123"
+        test_db, email="test@example.com", password="TestPass1234!"
     )
 
     # Update with empty data

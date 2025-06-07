@@ -4,6 +4,7 @@ from typing import List, Optional
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import hash_refresh_token, verify_refresh_token
 from app.models.user import User, UserRole
 from app.schemas.user import UserCreate, UserUpdate
 
@@ -144,7 +145,7 @@ class UserRepository:
         expires_at: Optional[datetime] = None,
     ) -> bool:
         """
-        Update a user's refresh token.
+        Update a user's refresh token with secure hashing.
 
         Args:
             user_id: User ID
@@ -154,11 +155,135 @@ class UserRepository:
         Returns:
             True if successful, False otherwise
         """
+        # Hash the refresh token before storing if provided
+        refresh_token_hash = None
+        if refresh_token:
+            refresh_token_hash = hash_refresh_token(refresh_token)
+
         stmt = (
             update(User)
             .where(User.id == user_id)
-            .values(refresh_token=refresh_token, refresh_token_expires_at=expires_at)
+            .values(
+                refresh_token=refresh_token_hash, refresh_token_expires_at=expires_at
+            )
             .execution_options(synchronize_session="fetch")
+        )
+        result = await self.db.execute(stmt)
+        return result.rowcount > 0
+
+    async def verify_refresh_token(self, user_id: int, provided_token: str) -> bool:
+        """
+        Verify a refresh token against the stored hash.
+
+        Args:
+            user_id: User ID
+            provided_token: Refresh token to verify
+
+        Returns:
+            True if token is valid, False otherwise
+        """
+        user = await self.get(user_id)
+        if not user or not user.refresh_token:
+            return False
+
+        # Verify the provided token against the stored hash
+        stored_token_hash = str(user.refresh_token) if user.refresh_token else ""
+        return verify_refresh_token(provided_token, stored_token_hash)
+
+    # New password reset methods
+    async def update_password_reset_code(
+        self,
+        user_id: int,
+        reset_code_hash: str,
+        expires_at: datetime,
+        reset_attempts: int = 0,
+    ) -> bool:
+        """
+        Update user's password reset code.
+
+        Args:
+            user_id: User ID
+            reset_code_hash: Hashed reset code
+            expires_at: Code expiration time
+            reset_attempts: Number of attempts (default 0)
+
+        Returns:
+            True if successful
+        """
+        stmt = (
+            update(User)
+            .where(User.id == user_id)
+            .values(
+                password_reset_code=reset_code_hash,
+                password_reset_expires_at=expires_at,
+                password_reset_attempts=reset_attempts,
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.rowcount > 0
+
+    async def clear_password_reset_code(self, user_id: int) -> bool:
+        """
+        Clear user's password reset code.
+
+        Args:
+            user_id: User ID
+
+        Returns:
+            True if successful
+        """
+        stmt = (
+            update(User)
+            .where(User.id == user_id)
+            .values(
+                password_reset_code=None,
+                password_reset_expires_at=None,
+                password_reset_attempts=0,
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.rowcount > 0
+
+    async def increment_password_reset_attempts(self, user_id: int) -> bool:
+        """
+        Increment password reset attempts counter.
+
+        Args:
+            user_id: User ID
+
+        Returns:
+            True if successful
+        """
+        user = await self.get(user_id)
+        if not user:
+            return False
+
+        stmt = (
+            update(User)
+            .where(User.id == user_id)
+            .values(password_reset_attempts=user.password_reset_attempts + 1)
+        )
+        result = await self.db.execute(stmt)
+        return result.rowcount > 0
+
+    async def update_password(self, user_id: int, hashed_password: str) -> bool:
+        """
+        Update user's password.
+
+        Args:
+            user_id: User ID
+            hashed_password: New hashed password
+
+        Returns:
+            True if successful
+        """
+        stmt = (
+            update(User)
+            .where(User.id == user_id)
+            .values(
+                hashed_password=hashed_password,
+                updated_at=datetime.utcnow(),
+            )
         )
         result = await self.db.execute(stmt)
         return result.rowcount > 0

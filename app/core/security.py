@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, Union
+from uuid import uuid4
 
-from jose import jwt
+from fastapi import HTTPException, status
+from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from app.core.config import settings
@@ -17,16 +19,26 @@ pwd_context = CryptContext(
     argon2__salt_len=settings.ARGON2_SALT_LENGTH,
 )
 
+# Pre-computed dummy hash for constant-time operations
+DUMMY_HASH = (
+    "$argon2id$v=19$m=102400,t=2,p=8$tNGFwKmxMGYNOkiBcVaIcQ$HXxLgJLqSBKFwHnLHTdBNA"
+)
+
 
 def create_access_token(
-    subject: Union[str, Any], expires_delta: Optional[timedelta] = None
+    subject: Union[str, Any],
+    expires_delta: Optional[timedelta] = None,
+    fingerprint: Optional[str] = None,
+    session_id: Optional[str] = None,
 ) -> str:
     """
-    Create a JWT access token.
+    Create a JWT access token with enhanced security features.
 
     Args:
         subject: Token subject (usually user ID)
         expires_delta: Optional expiration time delta
+        fingerprint: Optional client fingerprint for binding
+        session_id: Optional session identifier
 
     Returns:
         Encoded JWT token
@@ -38,7 +50,20 @@ def create_access_token(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
 
-    to_encode = {"exp": expire, "sub": str(subject), "type": "access"}
+    to_encode = {
+        "exp": expire,
+        "sub": str(subject),
+        "type": "access",
+        "jti": str(uuid4()),  # Unique token ID
+        "iat": datetime.utcnow(),  # Issued at
+    }
+
+    # Add optional claims
+    if fingerprint:
+        to_encode["fingerprint"] = fingerprint
+    if session_id:
+        to_encode["sid"] = session_id
+
     encoded_jwt: str = jwt.encode(
         to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
     )
@@ -46,14 +71,19 @@ def create_access_token(
 
 
 def create_refresh_token(
-    subject: Union[str, Any], expires_delta: Optional[timedelta] = None
+    subject: Union[str, Any],
+    expires_delta: Optional[timedelta] = None,
+    fingerprint: Optional[str] = None,
+    session_id: Optional[str] = None,
 ) -> str:
     """
-    Create a JWT refresh token with longer expiration.
+    Create a JWT refresh token with longer expiration and security features.
 
     Args:
         subject: Token subject (usually user ID)
         expires_delta: Optional expiration time delta
+        fingerprint: Optional client fingerprint for binding
+        session_id: Optional session identifier
 
     Returns:
         Encoded JWT refresh token
@@ -63,7 +93,20 @@ def create_refresh_token(
     else:
         expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
-    to_encode = {"exp": expire, "sub": str(subject), "type": "refresh"}
+    to_encode = {
+        "exp": expire,
+        "sub": str(subject),
+        "type": "refresh",
+        "jti": str(uuid4()),  # Unique token ID
+        "iat": datetime.utcnow(),  # Issued at
+    }
+
+    # Add optional claims
+    if fingerprint:
+        to_encode["fingerprint"] = fingerprint
+    if session_id:
+        to_encode["sid"] = session_id
+
     encoded_jwt: str = jwt.encode(
         to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
     )
@@ -72,7 +115,7 @@ def create_refresh_token(
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
-    Verify a password against a hash.
+    Verify a password against a hash using constant-time comparison.
 
     Args:
         plain_password: Password in plain text
@@ -99,20 +142,97 @@ def get_password_hash(password: str) -> str:
     return hashed
 
 
-async def verify_token(token: str) -> Dict[str, Any]:
+def hash_refresh_token(refresh_token: str) -> str:
     """
-    Decode and verify a JWT token.
+    Hash a refresh token for secure storage.
+
+    Args:
+        refresh_token: Refresh token to hash
+
+    Returns:
+        Hashed refresh token
+    """
+    return get_password_hash(refresh_token)
+
+
+def verify_refresh_token(provided_token: str, stored_hash: str) -> bool:
+    """
+    Verify a refresh token against its stored hash.
+
+    Args:
+        provided_token: Refresh token provided by client
+        stored_hash: Stored hash of the refresh token
+
+    Returns:
+        True if tokens match
+    """
+    return verify_password(provided_token, stored_hash)
+
+
+async def verify_token(
+    token: str, expected_fingerprint: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Decode and verify a JWT token with enhanced security.
 
     Args:
         token: JWT token to verify
+        expected_fingerprint: Expected fingerprint to validate against
 
     Returns:
         Token payload if valid
 
     Raises:
-        JWTError: If token is invalid
+        HTTPException: If token is invalid
     """
-    payload: Dict[str, Any] = jwt.decode(
-        token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
-    )
-    return payload
+    try:
+        # Parse header first to verify algorithm
+        unverified_header = jwt.get_unverified_header(token)
+        if unverified_header.get("alg") != settings.ALGORITHM:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token algorithm",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Verify with strict algorithm enforcement and required claims
+        payload: Dict[str, Any] = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            options={
+                "verify_signature": True,
+                "require": ["exp", "sub", "type"],
+                "verify_exp": True,
+                "verify_sub": True,
+            },
+        )
+
+        # Verify fingerprint if provided
+        if expected_fingerprint and "fingerprint" in payload:
+            if payload["fingerprint"] != expected_fingerprint:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid token fingerprint",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
+        return payload
+
+    except JWTError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from e
+
+
+def perform_constant_time_password_verification(password: str) -> None:
+    """
+    Perform a dummy password verification for timing attack prevention.
+    This should be called when a user doesn't exist to maintain constant timing.
+
+    Args:
+        password: The password to "verify" against dummy hash
+    """
+    verify_password(password, DUMMY_HASH)

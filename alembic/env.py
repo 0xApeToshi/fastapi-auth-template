@@ -11,7 +11,8 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from app.db.base import Base
-from app.models.user import User, BlacklistedToken, UserRole  # Import all models
+from app.models.user import User, BlacklistedToken, UserRole
+from app.models.session import UserSession  # Add this import
 from app.core.config import settings
 
 # this is the Alembic Config object, which provides

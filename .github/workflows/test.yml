@@ -276,8 +276,3 @@ jobs:
     - name: Run flake8 linting
       run: |
         flake8 app/ tests/ scripts/
-    
-    # - name: Run type checking with mypy
-    #   run: |
-    #     mypy app/ --ignore-missing-imports
-    #   continue-on-error: true

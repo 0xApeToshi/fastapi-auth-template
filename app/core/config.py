@@ -1,3 +1,4 @@
+import secrets
 from typing import List, Optional
 
 from pydantic import AnyHttpUrl, PostgresDsn, field_validator, model_validator
@@ -8,11 +9,29 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "User Management API"
 
+    # ENVIRONMENT
+    ENVIRONMENT: str = "development"  # development, staging, production
+
     # SECURITY
     SECRET_KEY: str  # Required, will raise error if not in environment
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30  # 30 minutes
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # 7 days
     ALGORITHM: str = "HS256"
+
+    # HTTPS and Cookie Security
+    HTTPS_REDIRECT: bool = False  # Default to False for development
+    SECURE_COOKIES: bool = False  # Default to False for development
+
+    # Session Management
+    MAX_CONCURRENT_SESSIONS: int = 5  # Maximum concurrent sessions per user
+    SESSION_EXPIRE_DAYS: int = 30  # Session expiration in days
+
+    # Account Security
+    MAX_FAILED_LOGIN_ATTEMPTS: int = 5  # Failed attempts before lockout
+    ACCOUNT_LOCKOUT_MINUTES: int = 15  # Account lockout duration
+
+    # Password Reset
+    PASSWORD_RESET_CODE_EXPIRE_MINUTES: int = 15  # Password reset code expiry
 
     # Password settings
     ARGON2_TIME_COST: int = 2
@@ -21,8 +40,32 @@ class Settings(BaseSettings):
     ARGON2_HASH_LENGTH: int = 16
     ARGON2_SALT_LENGTH: int = 16
 
+    # Rate Limiting Configuration
+    RATE_LIMIT_LOGIN: str = "5/minute"  # Login attempts per minute per IP
+    RATE_LIMIT_REFRESH: str = "10/minute"  # Token refresh per minute per IP
+    RATE_LIMIT_LOGOUT: str = "20/minute"  # Logout attempts per minute per IP
+    RATE_LIMIT_REGISTER: str = "3/minute"  # User registration per minute per IP
+    RATE_LIMIT_LIST_USERS: str = "30/minute"  # User listing per minute per IP
+    RATE_LIMIT_PASSWORD_RESET: str = "3/minute"  # Password reset per minute per IP
+    RATE_LIMIT_PASSWORD_RESET_CONFIRM: str = (
+        "5/minute"  # Password reset confirm per minute per IP
+    )
+
+    # Testing flag - when True, rate limiting is disabled
+    TESTING: bool = False
+
     # CORS - Changed to str to avoid JSON parsing issues
     BACKEND_CORS_ORIGINS: str = ""
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        """Validate that the secret key is secure."""
+        if len(v) < 32:
+            raise ValueError("SECRET_KEY must be at least 32 characters long")
+        if v in ["test-secret-key", "your-secret-key", "change-me", "secret"]:
+            raise ValueError("Cannot use default or weak secret key in production")
+        return v
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="after")
     @classmethod
@@ -90,22 +133,31 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def validate_security_settings(self) -> "Settings":
+        """Validate security settings for production."""
+        # Only enforce strict security in production environment
+        if self.ENVIRONMENT == "production":
+            if not self.HTTPS_REDIRECT:
+                raise ValueError("HTTPS_REDIRECT must be True in production")
+            if not self.SECURE_COOKIES:
+                raise ValueError("SECURE_COOKIES must be True in production")
+            if self.SECRET_KEY in ["your-super-secret-key-change-this-in-production"]:
+                raise ValueError("Must change default SECRET_KEY in production")
+        return self
+
     class Config:
         case_sensitive = True
         env_file = ".env"
         extra = "ignore"  # Allow extra fields in settings
 
 
+def generate_secret_key() -> str:
+    """Generate a cryptographically secure secret key."""
+    return secrets.token_urlsafe(32)  # 256-bit key
+
+
 # Create a default settings instance that can be imported
 # This will use environment variables or .env file
-try:
-    settings = Settings()  # type: ignore[call-arg]
-except Exception:
-    # For testing or when env vars are not set, create a dummy instance
-    # This will be overridden by test configurations
-    settings = Settings(
-        SECRET_KEY="test-secret-key",
-        POSTGRES_USER="test",
-        POSTGRES_PASSWORD="test",
-        POSTGRES_DB="test",
-    )  # type: ignore[call-arg]
+# NEVER silently fallback to testing mode - fail fast in production
+settings = Settings()  # type: ignore[call-arg]

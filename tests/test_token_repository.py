@@ -1,8 +1,9 @@
 from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.repositories.token import TokenRepository
+from app.repositories.token import TokenCleanupScheduler, TokenRepository
 
 
 @pytest.mark.asyncio
@@ -74,7 +75,7 @@ async def test_token_repository_clean_expired_tokens(test_db):
 
     await token_repository.blacklist(valid_token, future_time)
 
-    # Clean expired tokens
+    # Clean expired tokens - no parameter needed, uses current time internally
     cleaned_count = await token_repository.clean_expired_tokens()
 
     assert cleaned_count == 2  # Should clean 2 expired tokens
@@ -102,7 +103,7 @@ async def test_token_repository_clean_expired_tokens_none_expired(test_db):
     await token_repository.blacklist(valid_token1, future_time)
     await token_repository.blacklist(valid_token2, future_time)
 
-    # Clean expired tokens
+    # Clean expired tokens - no parameter needed
     cleaned_count = await token_repository.clean_expired_tokens()
 
     assert cleaned_count == 0  # Should clean 0 tokens
@@ -117,10 +118,35 @@ async def test_token_repository_clean_expired_tokens_empty_table(test_db):
     """Test TokenRepository clean_expired_tokens with empty table."""
     token_repository = TokenRepository(test_db)
 
-    # Clean expired tokens from empty table
+    # Clean expired tokens from empty table - no parameter needed
     cleaned_count = await token_repository.clean_expired_tokens()
 
     assert cleaned_count == 0
+
+
+@pytest.mark.asyncio
+async def test_token_repository_get_expired_token_count(test_db):
+    """Test TokenRepository get_expired_token_count method."""
+    token_repository = TokenRepository(test_db)
+
+    current_time = datetime.utcnow()
+
+    # Initially no expired tokens - no parameter needed
+    count = await token_repository.get_expired_token_count()
+    assert count == 0
+
+    # Add expired tokens
+    expired_time = current_time - timedelta(hours=1)
+    await token_repository.blacklist("expired_1", expired_time)
+    await token_repository.blacklist("expired_2", expired_time)
+
+    # Add valid token
+    future_time = current_time + timedelta(hours=1)
+    await token_repository.blacklist("valid_1", future_time)
+
+    # Check expired count - no parameter needed
+    count = await token_repository.get_expired_token_count()
+    assert count == 2
 
 
 @pytest.mark.asyncio
@@ -183,7 +209,7 @@ async def test_token_repository_clean_expired_boundary_time(test_db):
 
     await token_repository.blacklist(future_token, one_second_future)
 
-    # Clean expired tokens
+    # Clean expired tokens - no parameter needed
     cleaned_count = await token_repository.clean_expired_tokens()
 
     # Should clean tokens that expire before current time
@@ -256,7 +282,7 @@ async def test_token_repository_clean_mixed_expired_and_valid(test_db):
         await token_repository.blacklist(token, expires_at)
         valid_tokens.append(token)
 
-    # Clean expired tokens
+    # Clean expired tokens - no parameter needed
     cleaned_count = await token_repository.clean_expired_tokens()
 
     assert cleaned_count == 3  # Should clean 3 expired tokens
@@ -268,3 +294,113 @@ async def test_token_repository_clean_mixed_expired_and_valid(test_db):
     # Verify valid tokens are still there
     for token in valid_tokens:
         assert await token_repository.is_blacklisted(token) is True
+
+
+# Tests for TokenCleanupScheduler
+@pytest.mark.asyncio
+async def test_token_cleanup_scheduler_initialization():
+    """Test TokenCleanupScheduler initialization."""
+    scheduler = TokenCleanupScheduler()
+
+    assert scheduler.scheduler is None
+    assert scheduler.is_running is False
+    assert scheduler.get_next_run_time() is None
+
+
+@patch("app.repositories.token.AsyncIOScheduler")
+def test_token_cleanup_scheduler_start(mock_scheduler_class):
+    """Test TokenCleanupScheduler start method."""
+    mock_scheduler = AsyncMock()
+    mock_scheduler_class.return_value = mock_scheduler
+
+    scheduler = TokenCleanupScheduler()
+    scheduler.start_scheduler(interval_hours=2)
+
+    assert scheduler.is_running is True
+    mock_scheduler_class.assert_called_once()
+    # The scheduler adds 2 jobs: token cleanup and session cleanup
+    assert mock_scheduler.add_job.call_count == 2
+    mock_scheduler.start.assert_called_once()
+
+
+@patch("app.repositories.token.AsyncIOScheduler")
+def test_token_cleanup_scheduler_stop(mock_scheduler_class):
+    """Test TokenCleanupScheduler stop method."""
+    mock_scheduler = AsyncMock()
+    mock_scheduler_class.return_value = mock_scheduler
+
+    scheduler = TokenCleanupScheduler()
+    scheduler.start_scheduler()
+    scheduler.stop_scheduler()
+
+    assert scheduler.is_running is False
+    mock_scheduler.shutdown.assert_called_once()
+
+
+@patch("app.repositories.token.AsyncSessionLocal")
+@pytest.mark.asyncio
+async def test_token_cleanup_scheduler_cleanup_function(mock_session_local):
+    """Test TokenCleanupScheduler cleanup function."""
+    # Mock the session and repository
+    mock_session = AsyncMock()
+    mock_session_local.return_value.__aenter__.return_value = mock_session
+
+    scheduler = TokenCleanupScheduler()
+
+    # Mock TokenRepository methods
+    with patch("app.repositories.token.TokenRepository") as mock_repo_class:
+        mock_repo = AsyncMock()
+        mock_repo.get_expired_token_count.return_value = 5
+        mock_repo.clean_expired_tokens.return_value = 5
+        mock_repo_class.return_value = mock_repo
+
+        # Call the cleanup function directly
+        await scheduler._cleanup_expired_tokens()
+
+        # Verify the repository methods were called
+        mock_repo.get_expired_token_count.assert_called_once()
+        mock_repo.clean_expired_tokens.assert_called_once()
+        mock_session.commit.assert_called_once()
+
+
+@patch("app.repositories.token.AsyncSessionLocal")
+@pytest.mark.asyncio
+async def test_token_cleanup_scheduler_manual_cleanup(mock_session_local):
+    """Test TokenCleanupScheduler manual cleanup method."""
+    # Mock the session and repository
+    mock_session = AsyncMock()
+    mock_session_local.return_value.__aenter__.return_value = mock_session
+
+    scheduler = TokenCleanupScheduler()
+
+    # Mock TokenRepository methods
+    with patch("app.repositories.token.TokenRepository") as mock_repo_class:
+        mock_repo = AsyncMock()
+        mock_repo.clean_expired_tokens.return_value = 3
+        mock_repo_class.return_value = mock_repo
+
+        # Call manual cleanup
+        result = await scheduler.manual_cleanup()
+
+        # Verify the result and calls
+        assert result == 3
+        mock_repo.clean_expired_tokens.assert_called_once()
+        mock_session.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_token_cleanup_scheduler_start_already_running():
+    """Test that starting an already running scheduler doesn't create issues."""
+    with patch("app.repositories.token.AsyncIOScheduler") as mock_scheduler_class:
+        mock_scheduler = AsyncMock()
+        mock_scheduler_class.return_value = mock_scheduler
+
+        scheduler = TokenCleanupScheduler()
+
+        # Start scheduler twice
+        scheduler.start_scheduler()
+        scheduler.start_scheduler()  # Should not create a new scheduler
+
+        # Should only be called once
+        mock_scheduler_class.assert_called_once()
+        mock_scheduler.start.assert_called_once()

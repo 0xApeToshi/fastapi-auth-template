@@ -15,7 +15,7 @@ async def test_user_service_create(test_db):
     user_service = UserService(user_repository)
 
     user_create = UserCreate(
-        email="test@example.com", password="password123", role=UserRole.REGULAR
+        email="test@example.com", password="TestPass1234!", role=UserRole.REGULAR
     )
 
     user = await user_service.create(user_create)
@@ -33,11 +33,11 @@ async def test_user_service_create_duplicate_email(test_db):
     user_service = UserService(user_repository)
 
     # Create first user
-    await create_test_user(test_db, email="test@example.com", password="password123")
+    await create_test_user(test_db, email="test@example.com", password="TestPass1234!")
 
     # Try to create second user with same email
     user_create = UserCreate(
-        email="test@example.com", password="password123", role=UserRole.REGULAR
+        email="test@example.com", password="TestPass1234!", role=UserRole.REGULAR
     )
 
     with pytest.raises(HTTPException) as exc_info:
@@ -55,7 +55,7 @@ async def test_user_service_get(test_db):
 
     # Create test user
     created_user = await create_test_user(
-        test_db, email="test@example.com", password="password123"
+        test_db, email="test@example.com", password="TestPass1234!"
     )
 
     # Get user
@@ -85,7 +85,7 @@ async def test_user_service_get_by_email(test_db):
     user_service = UserService(user_repository)
 
     # Create test user
-    await create_test_user(test_db, email="test@example.com", password="password123")
+    await create_test_user(test_db, email="test@example.com", password="TestPass1234!")
 
     # Get user by email
     user = await user_service.get_by_email("test@example.com")
@@ -105,10 +105,10 @@ async def test_user_service_authenticate_success(test_db):
     user_service = UserService(user_repository)
 
     # Create test user
-    await create_test_user(test_db, email="test@example.com", password="password123")
+    await create_test_user(test_db, email="test@example.com", password="TestPass1234!")
 
     # Authenticate
-    user = await user_service.authenticate("test@example.com", "password123")
+    user = await user_service.authenticate("test@example.com", "TestPass1234!")
 
     assert user is not None
     assert user.email == "test@example.com"
@@ -121,10 +121,10 @@ async def test_user_service_authenticate_wrong_password(test_db):
     user_service = UserService(user_repository)
 
     # Create test user
-    await create_test_user(test_db, email="test@example.com", password="password123")
+    await create_test_user(test_db, email="test@example.com", password="TestPass1234!")
 
     # Try wrong password
-    user = await user_service.authenticate("test@example.com", "wrongpassword")
+    user = await user_service.authenticate("test@example.com", "WrongPass123!")
 
     assert user is None
 
@@ -136,7 +136,7 @@ async def test_user_service_authenticate_nonexistent_user(test_db):
     user_service = UserService(user_repository)
 
     # Try non-existent user
-    user = await user_service.authenticate("nonexistent@example.com", "password123")
+    user = await user_service.authenticate("nonexistent@example.com", "TestPass1234!")
 
     assert user is None
 
@@ -150,7 +150,7 @@ async def test_user_service_list(test_db):
     # Create test users
     for i in range(5):
         await create_test_user(
-            test_db, email=f"user{i}@example.com", password="password123"
+            test_db, email=f"user{i}@example.com", password="TestPass1234!"
         )
 
     # List all users
@@ -164,18 +164,51 @@ async def test_user_service_list(test_db):
 
 @pytest.mark.asyncio
 async def test_user_service_update(test_db):
-    """Test UserService update method."""
+    """Test UserService update method with active user."""
     user_repository = UserRepository(test_db)
     user_service = UserService(user_repository)
 
     # Create test user
     user = await create_test_user(
-        test_db, email="test@example.com", password="password123"
+        test_db, email="test@example.com", password="TestPass1234!"
     )
 
-    # Update user
+    # Update user (keeping them active for authentication test)
     user_update = UserUpdate(
-        email="updated@example.com", password="newpassword123", is_active=False
+        email="updated@example.com", password="NewTestPass1234!", is_active=True
+    )
+
+    updated_user = await user_service.update(user.id, user_update)
+
+    assert updated_user.email == "updated@example.com"
+    assert updated_user.is_active is True
+
+    # Verify password was updated (authenticate with new password)
+    auth_user = await user_service.authenticate(
+        "updated@example.com", "NewTestPass1234!"
+    )
+    assert auth_user is not None
+    assert auth_user.email == "updated@example.com"
+
+    # Verify old password no longer works
+    old_auth = await user_service.authenticate("updated@example.com", "TestPass1234!")
+    assert old_auth is None
+
+
+@pytest.mark.asyncio
+async def test_user_service_update_inactive_user(test_db):
+    """Test UserService update method when setting user inactive."""
+    user_repository = UserRepository(test_db)
+    user_service = UserService(user_repository)
+
+    # Create test user
+    user = await create_test_user(
+        test_db, email="test@example.com", password="TestPass1234!"
+    )
+
+    # Update user and set them inactive
+    user_update = UserUpdate(
+        email="updated@example.com", password="NewTestPass1234!", is_active=False
     )
 
     updated_user = await user_service.update(user.id, user_update)
@@ -183,9 +216,11 @@ async def test_user_service_update(test_db):
     assert updated_user.email == "updated@example.com"
     assert updated_user.is_active is False
 
-    # Verify password was updated (authenticate with new password)
-    auth_user = await user_service.authenticate("updated@example.com", "newpassword123")
-    assert auth_user is not None
+    # Verify inactive user cannot authenticate (even with correct password)
+    auth_user = await user_service.authenticate(
+        "updated@example.com", "NewTestPass1234!"
+    )
+    assert auth_user is None  # Should return None for inactive users
 
 
 @pytest.mark.asyncio
@@ -211,9 +246,9 @@ async def test_user_service_update_duplicate_email(test_db):
 
     # Create two users
     user1 = await create_test_user(
-        test_db, email="user1@example.com", password="password123"
+        test_db, email="user1@example.com", password="TestPass1234!"
     )
-    await create_test_user(test_db, email="user2@example.com", password="password123")
+    await create_test_user(test_db, email="user2@example.com", password="TestPass1234!")
 
     # Try to update user1 with user2's email
     user_update = UserUpdate(email="user2@example.com")
@@ -233,7 +268,7 @@ async def test_user_service_update_same_email(test_db):
 
     # Create test user
     user = await create_test_user(
-        test_db, email="test@example.com", password="password123"
+        test_db, email="test@example.com", password="TestPass1234!"
     )
 
     # Update user with same email but different role
@@ -255,7 +290,10 @@ async def test_user_service_update_partial(test_db):
 
     # Create test user
     user = await create_test_user(
-        test_db, email="test@example.com", password="password123", role=UserRole.REGULAR
+        test_db,
+        email="test@example.com",
+        password="TestPass1234!",
+        role=UserRole.REGULAR,
     )
 
     # Update only the role
@@ -279,11 +317,11 @@ async def test_user_service_update_password_only(test_db):
 
     # Create test user
     user = await create_test_user(
-        test_db, email="test@example.com", password="password123"
+        test_db, email="test@example.com", password="TestPass1234!"
     )
 
     # Update only the password
-    user_update = UserUpdate(password="newpassword456")
+    user_update = UserUpdate(password="NewTestPass456!")
 
     updated_user = await user_service.update(user.id, user_update)
 
@@ -291,11 +329,11 @@ async def test_user_service_update_password_only(test_db):
     assert updated_user.email == "test@example.com"
 
     # Old password should not work
-    auth_old = await user_service.authenticate("test@example.com", "password123")
+    auth_old = await user_service.authenticate("test@example.com", "TestPass1234!")
     assert auth_old is None
 
     # New password should work
-    auth_new = await user_service.authenticate("test@example.com", "newpassword456")
+    auth_new = await user_service.authenticate("test@example.com", "NewTestPass456!")
     assert auth_new is not None
 
 
@@ -307,7 +345,7 @@ async def test_user_service_delete(test_db):
 
     # Create test user
     user = await create_test_user(
-        test_db, email="test@example.com", password="password123"
+        test_db, email="test@example.com", password="TestPass1234!"
     )
 
     # Delete user
@@ -347,7 +385,7 @@ async def test_user_service_create_admin_user(test_db):
     user_service = UserService(user_repository)
 
     user_create = UserCreate(
-        email="admin@example.com", password="password123", role=UserRole.ADMIN
+        email="admin@example.com", password="AdminPass123!", role=UserRole.ADMIN
     )
 
     user = await user_service.create(user_create)
@@ -364,7 +402,7 @@ async def test_user_service_create_inactive_user(test_db):
     user_service = UserService(user_repository)
 
     user_create = UserCreate(
-        email="inactive@example.com", password="password123", is_active=False
+        email="inactive@example.com", password="InactivePass123!", is_active=False
     )
 
     user = await user_service.create(user_create)
@@ -382,16 +420,15 @@ async def test_user_service_authenticate_inactive_user(test_db):
 
     # Create inactive user
     await create_test_user(
-        test_db, email="inactive@example.com", password="password123", is_active=False
+        test_db, email="inactive@example.com", password="TestPass1234!", is_active=False
     )
 
-    # Try to authenticate - should work even if inactive
-    # (The auth service layer handles active/inactive logic)
-    user = await user_service.authenticate("inactive@example.com", "password123")
+    # Try to authenticate - should return None due to constant-time auth changes
+    # The enhanced authentication now returns None for inactive users
+    # to prevent timing attacks
+    user = await user_service.authenticate("inactive@example.com", "TestPass1234!")
 
-    assert user is not None
-    assert user.email == "inactive@example.com"
-    assert user.is_active is False
+    assert user is None  # Changed: inactive users return None now
 
 
 @pytest.mark.asyncio
@@ -413,7 +450,7 @@ async def test_user_service_list_pagination_edge_cases(test_db):
     # Create 3 test users
     for i in range(3):
         await create_test_user(
-            test_db, email=f"user{i}@example.com", password="password123"
+            test_db, email=f"user{i}@example.com", password="TestPass1234!"
         )
 
     # Test skip beyond available records
