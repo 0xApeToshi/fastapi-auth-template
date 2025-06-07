@@ -15,6 +15,21 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # 7 days
     ALGORITHM: str = "HS256"
 
+    # HTTPS and Cookie Security
+    HTTPS_REDIRECT: bool = True  # Redirect HTTP to HTTPS
+    SECURE_COOKIES: bool = True  # Use secure cookies in production
+
+    # Session Management
+    MAX_CONCURRENT_SESSIONS: int = 5  # Maximum concurrent sessions per user
+    SESSION_EXPIRE_DAYS: int = 30  # Session expiration in days
+
+    # Account Security
+    MAX_FAILED_LOGIN_ATTEMPTS: int = 5  # Failed attempts before lockout
+    ACCOUNT_LOCKOUT_MINUTES: int = 15  # Account lockout duration
+
+    # Password Reset
+    PASSWORD_RESET_CODE_EXPIRE_MINUTES: int = 15  # Password reset code expiry
+
     # Password settings
     ARGON2_TIME_COST: int = 2
     ARGON2_MEMORY_COST: int = 102400
@@ -29,6 +44,9 @@ class Settings(BaseSettings):
     RATE_LIMIT_REGISTER: str = "3/minute"  # User registration per minute per IP
     RATE_LIMIT_LIST_USERS: str = "30/minute"  # User listing per minute per IP
     RATE_LIMIT_PASSWORD_RESET: str = "3/minute"  # Password reset per minute per IP
+    RATE_LIMIT_PASSWORD_RESET_CONFIRM: str = (
+        "5/minute"  # Password reset confirm per minute per IP
+    )
 
     # Testing flag - when True, rate limiting is disabled
     TESTING: bool = False
@@ -112,6 +130,17 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def validate_security_settings(self) -> "Settings":
+        """Validate security settings for production."""
+        if not self.TESTING:
+            # In production, ensure secure defaults
+            if not self.HTTPS_REDIRECT:
+                raise ValueError("HTTPS_REDIRECT should be True in production")
+            if not self.SECURE_COOKIES:
+                raise ValueError("SECURE_COOKIES should be True in production")
+        return self
+
     class Config:
         case_sensitive = True
         env_file = ".env"
@@ -125,17 +154,5 @@ def generate_secret_key() -> str:
 
 # Create a default settings instance that can be imported
 # This will use environment variables or .env file
-try:
-    settings = Settings()  # type: ignore[call-arg]
-except Exception:
-    # For testing or when env vars are not set, create a dummy instance
-    # This will be overridden by test configurations
-    # Generate a secure key for testing
-    test_secret_key = generate_secret_key()
-    settings = Settings(
-        SECRET_KEY=test_secret_key,
-        POSTGRES_USER="test",
-        POSTGRES_PASSWORD="test",
-        POSTGRES_DB="test",
-        TESTING=True,  # Enable testing mode by default for fallback
-    )  # type: ignore[call-arg]
+# NEVER silently fallback to testing mode - fail fast in production
+settings = Settings()  # type: ignore[call-arg]

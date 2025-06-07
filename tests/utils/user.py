@@ -44,7 +44,7 @@ async def get_user_auth_headers(
     client,
     email: str,
     password: str,
-    api_prefix: str,
+    api_prefix: str = "/api/v1",  # Default to test API prefix
 ) -> dict:
     """
     Get authentication headers for a user.
@@ -53,7 +53,7 @@ async def get_user_auth_headers(
         client: Test client
         email: User email
         password: User password
-        api_prefix: API prefix (e.g. "/api/v1")
+        api_prefix: API prefix (defaults to "/api/v1" for tests)
 
     Returns:
         Dict with Authorization header

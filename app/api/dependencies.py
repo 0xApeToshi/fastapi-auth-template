@@ -1,6 +1,6 @@
 from typing import Annotated, Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import (
     HTTPAuthorizationCredentials,
     HTTPBearer,
@@ -10,9 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.models.user import User, UserRole
+from app.repositories.session import SessionRepository
 from app.repositories.token import TokenRepository
 from app.repositories.user import UserRepository
 from app.services.auth import AuthService
+from app.services.email import EmailService, MockEmailService
 from app.services.user import UserService
 
 # OAuth2 password bearer scheme for login endpoint
@@ -51,6 +53,19 @@ async def get_token_repository(db: DbSession) -> TokenRepository:
     return TokenRepository(db)
 
 
+async def get_session_repository(db: DbSession) -> SessionRepository:
+    """
+    Dependency for SessionRepository.
+
+    Args:
+        db: Database session
+
+    Returns:
+        SessionRepository instance
+    """
+    return SessionRepository(db)
+
+
 async def get_user_service(
     user_repository: Annotated[UserRepository, Depends(get_user_repository)],
 ) -> UserService:
@@ -85,6 +100,18 @@ async def get_auth_service(
     return AuthService(user_service, user_repository, token_repository)
 
 
+async def get_email_service() -> EmailService:
+    """
+    Dependency for EmailService.
+
+    Returns:
+        EmailService instance (MockEmailService for now)
+    """
+    # In production, you would return a real email service implementation
+    # based on your configuration (SendGrid, AWS SES, etc.)
+    return MockEmailService()
+
+
 async def get_token_from_bearer(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(http_bearer)],
 ) -> str:
@@ -102,8 +129,8 @@ async def get_token_from_bearer(
 
 # Support both OAuth2 password flow and explicit HTTP Bearer tokens
 async def get_token(
-    oauth2_token: Annotated[str, Depends(oauth2_scheme)] = None,
-    bearer_token: Annotated[Optional[str], Depends(get_token_from_bearer)] = None,
+    oauth2_token: Optional[str] = Depends(oauth2_scheme),
+    bearer_token: Optional[str] = None,
 ) -> str:
     """
     Get token from either OAuth2 or HTTP Bearer authentication.
@@ -130,20 +157,22 @@ async def get_token(
 
 
 async def get_current_user(
+    request: Request,
     token: Annotated[str, Depends(get_token)],
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ) -> User:
     """
-    Dependency for current authenticated user.
+    Dependency for current authenticated user with fingerprint validation.
 
     Args:
+        request: FastAPI request for fingerprint validation
         token: JWT token from request
         auth_service: AuthService instance
 
     Returns:
         Current user
     """
-    return await auth_service.get_current_user(token)
+    return await auth_service.get_current_user(token, request)
 
 
 async def get_current_active_user(

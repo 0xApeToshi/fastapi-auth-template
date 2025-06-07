@@ -2,7 +2,11 @@ from typing import List, Optional
 
 from fastapi import HTTPException, status
 
-from app.core.security import get_password_hash, verify_password
+from app.core.security import (
+    get_password_hash,
+    perform_constant_time_password_verification,
+    verify_password,
+)
 from app.models.user import User
 from app.repositories.user import UserRepository
 from app.schemas.user import UserCreate, UserUpdate
@@ -49,7 +53,7 @@ class UserService:
 
     async def authenticate(self, email: str, password: str) -> Optional[User]:
         """
-        Authenticate a user with constant-time operations to prevent timing attacks.
+        Authenticate a user with enhanced constant-time operations.
 
         Args:
             email: User email
@@ -60,17 +64,17 @@ class UserService:
         """
         user = await self.get_by_email(email)
 
-        # Always perform password verification to prevent timing attacks
         if user:
+            # Verify password for existing user
             password_valid = verify_password(password, str(user.hashed_password))
+            # Return user only if password is valid AND user is active
             if password_valid and user.is_active:
                 return user
+            return None
         else:
-            # Perform dummy hash operation to maintain constant timing
-            # This prevents timing attacks that could reveal user existence
-            get_password_hash("dummy_password_to_maintain_timing")
-
-        return None
+            # Perform dummy verification to maintain constant timing
+            perform_constant_time_password_verification(password)
+            return None
 
     async def list(self, skip: int = 0, limit: int = 100) -> List[User]:
         """

@@ -4,13 +4,12 @@ import pytest
 from fastapi import status
 from httpx import AsyncClient
 
-from app.core.config import settings
 from app.models.user import UserRole
 from tests.utils.user import create_test_user
 
 
 @pytest.mark.asyncio
-async def test_login(client: AsyncClient, test_db):
+async def test_login(client: AsyncClient, test_db, test_settings):
     """Test login endpoint."""
     # Create a test user with compliant password
     user_data = {
@@ -26,7 +25,7 @@ async def test_login(client: AsyncClient, test_db):
         "password": user_data["password"],
     }
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/login",
+        f"{test_settings.API_V1_STR}/auth/login",
         data=login_data,
     )
 
@@ -38,7 +37,7 @@ async def test_login(client: AsyncClient, test_db):
 
 
 @pytest.mark.asyncio
-async def test_login_wrong_password(client: AsyncClient, test_db):
+async def test_login_wrong_password(client: AsyncClient, test_db, test_settings):
     """Test login with wrong password."""
     # Create a test user
     user_data = {
@@ -54,7 +53,7 @@ async def test_login_wrong_password(client: AsyncClient, test_db):
         "password": "WrongPass123!",
     }
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/login",
+        f"{test_settings.API_V1_STR}/auth/login",
         data=login_data,
     )
 
@@ -62,14 +61,14 @@ async def test_login_wrong_password(client: AsyncClient, test_db):
 
 
 @pytest.mark.asyncio
-async def test_login_nonexistent_user(client: AsyncClient, test_db):
+async def test_login_nonexistent_user(client: AsyncClient, test_db, test_settings):
     """Test login with non-existent user."""
     login_data = {
         "username": "nonexistent@example.com",
         "password": "TestPass1234!",
     }
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/login",
+        f"{test_settings.API_V1_STR}/auth/login",
         data=login_data,
     )
 
@@ -79,7 +78,7 @@ async def test_login_nonexistent_user(client: AsyncClient, test_db):
 
 
 @pytest.mark.asyncio
-async def test_login_inactive_user(client: AsyncClient, test_db):
+async def test_login_inactive_user(client: AsyncClient, test_db, test_settings):
     """Test login with inactive user."""
     # Create an inactive test user
     user_data = {
@@ -97,7 +96,7 @@ async def test_login_inactive_user(client: AsyncClient, test_db):
         "password": user_data["password"],
     }
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/login",
+        f"{test_settings.API_V1_STR}/auth/login",
         data=login_data,
     )
 
@@ -108,25 +107,25 @@ async def test_login_inactive_user(client: AsyncClient, test_db):
 
 
 @pytest.mark.asyncio
-async def test_login_missing_credentials(client: AsyncClient, test_db):
+async def test_login_missing_credentials(client: AsyncClient, test_db, test_settings):
     """Test login with missing credentials."""
     # Missing password
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/login",
+        f"{test_settings.API_V1_STR}/auth/login",
         data={"username": "test@example.com"},
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     # Missing username
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/login",
+        f"{test_settings.API_V1_STR}/auth/login",
         data={"password": "TestPass1234!"},
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
 @pytest.mark.asyncio
-async def test_refresh_token(client: AsyncClient, test_db):
+async def test_refresh_token(client: AsyncClient, test_db, test_settings):
     """Test refresh token endpoint."""
     # Create a test user
     user_data = {
@@ -142,7 +141,7 @@ async def test_refresh_token(client: AsyncClient, test_db):
         "password": user_data["password"],
     }
     login_response = await client.post(
-        f"{settings.API_V1_STR}/auth/login",
+        f"{test_settings.API_V1_STR}/auth/login",
         data=login_data,
     )
 
@@ -159,7 +158,7 @@ async def test_refresh_token(client: AsyncClient, test_db):
         "refresh_token": tokens["refresh_token"],
     }
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/refresh",
+        f"{test_settings.API_V1_STR}/auth/refresh",
         json=refresh_data,
     )
 
@@ -174,13 +173,13 @@ async def test_refresh_token(client: AsyncClient, test_db):
 
 
 @pytest.mark.asyncio
-async def test_refresh_token_invalid(client: AsyncClient, test_db):
+async def test_refresh_token_invalid(client: AsyncClient, test_db, test_settings):
     """Test refresh token with invalid token."""
     refresh_data = {
         "refresh_token": "invalid_token",
     }
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/refresh",
+        f"{test_settings.API_V1_STR}/auth/refresh",
         json=refresh_data,
     )
 
@@ -191,7 +190,9 @@ async def test_refresh_token_invalid(client: AsyncClient, test_db):
 
 
 @pytest.mark.asyncio
-async def test_refresh_token_with_access_token(client: AsyncClient, test_db):
+async def test_refresh_token_with_access_token(
+    client: AsyncClient, test_db, test_settings
+):
     """Test refresh token endpoint with access token instead of refresh token."""
     # Create a test user and login
     user_data = {
@@ -206,7 +207,7 @@ async def test_refresh_token_with_access_token(client: AsyncClient, test_db):
         "password": user_data["password"],
     }
     login_response = await client.post(
-        f"{settings.API_V1_STR}/auth/login",
+        f"{test_settings.API_V1_STR}/auth/login",
         data=login_data,
     )
 
@@ -218,7 +219,7 @@ async def test_refresh_token_with_access_token(client: AsyncClient, test_db):
         "refresh_token": tokens["access_token"],  # Wrong token type
     }
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/refresh",
+        f"{test_settings.API_V1_STR}/auth/refresh",
         json=refresh_data,
     )
 
@@ -228,7 +229,9 @@ async def test_refresh_token_with_access_token(client: AsyncClient, test_db):
 
 
 @pytest.mark.asyncio
-async def test_refresh_token_reuse_after_refresh(client: AsyncClient, test_db):
+async def test_refresh_token_reuse_after_refresh(
+    client: AsyncClient, test_db, test_settings
+):
     """Test that old refresh token can't be reused after refresh."""
     # Create a test user and login
     user_data = {
@@ -243,7 +246,7 @@ async def test_refresh_token_reuse_after_refresh(client: AsyncClient, test_db):
         "password": user_data["password"],
     }
     login_response = await client.post(
-        f"{settings.API_V1_STR}/auth/login",
+        f"{test_settings.API_V1_STR}/auth/login",
         data=login_data,
     )
 
@@ -257,21 +260,21 @@ async def test_refresh_token_reuse_after_refresh(client: AsyncClient, test_db):
         "refresh_token": original_tokens["refresh_token"],
     }
     first_refresh_response = await client.post(
-        f"{settings.API_V1_STR}/auth/refresh",
+        f"{test_settings.API_V1_STR}/auth/refresh",
         json=refresh_data,
     )
     assert first_refresh_response.status_code == status.HTTP_200_OK
 
     # Try to use the same refresh token again - should fail
     second_refresh_response = await client.post(
-        f"{settings.API_V1_STR}/auth/refresh",
+        f"{test_settings.API_V1_STR}/auth/refresh",
         json=refresh_data,
     )
     assert second_refresh_response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 @pytest.mark.asyncio
-async def test_logout(client: AsyncClient, test_db):
+async def test_logout(client: AsyncClient, test_db, test_settings):
     """Test logout endpoint."""
     # Create a test user
     user_data = {
@@ -287,7 +290,7 @@ async def test_logout(client: AsyncClient, test_db):
         "password": user_data["password"],
     }
     login_response = await client.post(
-        f"{settings.API_V1_STR}/auth/login",
+        f"{test_settings.API_V1_STR}/auth/login",
         data=login_data,
     )
 
@@ -296,7 +299,7 @@ async def test_logout(client: AsyncClient, test_db):
 
     # Logout
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/logout",
+        f"{test_settings.API_V1_STR}/auth/logout",
         headers={"Authorization": f"Bearer {tokens['access_token']}"},
     )
 
@@ -306,7 +309,7 @@ async def test_logout(client: AsyncClient, test_db):
 
     # Try to use token after logout (should fail)
     me_response = await client.get(
-        f"{settings.API_V1_STR}/users/me",
+        f"{test_settings.API_V1_STR}/users/me",
         headers={"Authorization": f"Bearer {tokens['access_token']}"},
     )
 
@@ -314,10 +317,10 @@ async def test_logout(client: AsyncClient, test_db):
 
 
 @pytest.mark.asyncio
-async def test_logout_invalid_token(client: AsyncClient, test_db):
+async def test_logout_invalid_token(client: AsyncClient, test_db, test_settings):
     """Test logout with invalid token."""
     response = await client.post(
-        f"{settings.API_V1_STR}/auth/logout",
+        f"{test_settings.API_V1_STR}/auth/logout",
         headers={"Authorization": "Bearer invalid_token"},
     )
 
@@ -325,15 +328,15 @@ async def test_logout_invalid_token(client: AsyncClient, test_db):
 
 
 @pytest.mark.asyncio
-async def test_logout_missing_token(client: AsyncClient, test_db):
+async def test_logout_missing_token(client: AsyncClient, test_db, test_settings):
     """Test logout without token."""
-    response = await client.post(f"{settings.API_V1_STR}/auth/logout")
+    response = await client.post(f"{test_settings.API_V1_STR}/auth/logout")
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 @pytest.mark.asyncio
-async def test_logout_twice(client: AsyncClient, test_db):
+async def test_logout_twice(client: AsyncClient, test_db, test_settings):
     """Test logout twice with same token."""
     # Create a test user and login
     user_data = {
@@ -348,7 +351,7 @@ async def test_logout_twice(client: AsyncClient, test_db):
         "password": user_data["password"],
     }
     login_response = await client.post(
-        f"{settings.API_V1_STR}/auth/login",
+        f"{test_settings.API_V1_STR}/auth/login",
         data=login_data,
     )
 
@@ -357,14 +360,14 @@ async def test_logout_twice(client: AsyncClient, test_db):
 
     # First logout - should work
     first_logout = await client.post(
-        f"{settings.API_V1_STR}/auth/logout",
+        f"{test_settings.API_V1_STR}/auth/logout",
         headers={"Authorization": f"Bearer {tokens['access_token']}"},
     )
     assert first_logout.status_code == status.HTTP_200_OK
 
     # Second logout with same token - should fail with "Token already invalidated"
     second_logout = await client.post(
-        f"{settings.API_V1_STR}/auth/logout",
+        f"{test_settings.API_V1_STR}/auth/logout",
         headers={"Authorization": f"Bearer {tokens['access_token']}"},
     )
     assert second_logout.status_code == status.HTTP_401_UNAUTHORIZED
@@ -373,7 +376,9 @@ async def test_logout_twice(client: AsyncClient, test_db):
 
 
 @pytest.mark.asyncio
-async def test_multiple_logins_different_tokens(client: AsyncClient, test_db):
+async def test_multiple_logins_different_tokens(
+    client: AsyncClient, test_db, test_settings
+):
     """Test that multiple logins generate different tokens."""
     # Create a test user
     user_data = {
@@ -390,7 +395,7 @@ async def test_multiple_logins_different_tokens(client: AsyncClient, test_db):
 
     # First login
     response1 = await client.post(
-        f"{settings.API_V1_STR}/auth/login",
+        f"{test_settings.API_V1_STR}/auth/login",
         data=login_data,
     )
     assert response1.status_code == 200, f"First login failed: {response1.text}"
@@ -400,7 +405,7 @@ async def test_multiple_logins_different_tokens(client: AsyncClient, test_db):
 
     # Second login
     response2 = await client.post(
-        f"{settings.API_V1_STR}/auth/login",
+        f"{test_settings.API_V1_STR}/auth/login",
         data=login_data,
     )
     assert response2.status_code == 200, f"Second login failed: {response2.text}"
@@ -412,13 +417,13 @@ async def test_multiple_logins_different_tokens(client: AsyncClient, test_db):
 
     # Both tokens should work
     me_response1 = await client.get(
-        f"{settings.API_V1_STR}/users/me",
+        f"{test_settings.API_V1_STR}/users/me",
         headers={"Authorization": f"Bearer {tokens1['access_token']}"},
     )
     assert me_response1.status_code == status.HTTP_200_OK
 
     me_response2 = await client.get(
-        f"{settings.API_V1_STR}/users/me",
+        f"{test_settings.API_V1_STR}/users/me",
         headers={"Authorization": f"Bearer {tokens2['access_token']}"},
     )
     assert me_response2.status_code == status.HTTP_200_OK

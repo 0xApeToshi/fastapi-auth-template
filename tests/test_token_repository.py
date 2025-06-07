@@ -318,7 +318,8 @@ def test_token_cleanup_scheduler_start(mock_scheduler_class):
 
     assert scheduler.is_running is True
     mock_scheduler_class.assert_called_once()
-    mock_scheduler.add_job.assert_called_once()
+    # The scheduler adds 2 jobs: token cleanup and session cleanup
+    assert mock_scheduler.add_job.call_count == 2
     mock_scheduler.start.assert_called_once()
 
 
