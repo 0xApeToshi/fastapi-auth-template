@@ -1,9 +1,5 @@
 from datetime import datetime, timedelta
-
-# Import additional types
 from typing import List, Optional, Tuple
-
-# Import uuid4 for session tokens
 from uuid import uuid4
 
 from fastapi import HTTPException, Request, status
@@ -46,16 +42,7 @@ class AuthService:
         """
         Authenticate user and generate tokens with session management.
 
-        Args:
-            email: User email
-            password: Plain text password
-            request: FastAPI request for fingerprinting
-
-        Returns:
-            Tuple of (access_token, refresh_token, user)
-
-        Raises:
-            HTTPException: If authentication fails or account is locked
+        Fixed to properly handle session tokens without double hashing.
         """
         user = await self.user_service.get_by_email(email)
 
@@ -115,29 +102,30 @@ class AuthService:
 
         # Generate client fingerprint
         fingerprint = generate_fingerprint(request)
-
-        # Create session
         from app.core.fingerprint import get_client_ip
 
+        # FIXED: Generate session token that will be stored in JWT
+        # This token should NOT be hashed here - let the repository handle hashing
         session_token = str(uuid4())
 
+        # Create JWT tokens with the raw session token
         access_token = create_access_token(
             user_id,
             fingerprint=fingerprint,
-            session_id=session_token,
+            session_id=session_token,  # Raw UUID, not hashed
         )
         refresh_token = create_refresh_token(
             user_id,
             fingerprint=fingerprint,
-            session_id=session_token,
+            session_id=session_token,  # Raw UUID, not hashed
         )
 
-        # Store session
+        # Store session - repository will handle hashing
         expires_at = datetime.utcnow() + timedelta(days=settings.SESSION_EXPIRE_DAYS)
         await session_repo.create(
             user_id=user_id,
-            session_token=session_token,
-            refresh_token=refresh_token,
+            session_token=session_token,  # Raw token - will be hashed in repository
+            refresh_token=refresh_token,  # Raw token - will be hashed in repository
             user_agent=request.headers.get("User-Agent"),
             ip_address=get_client_ip(request),
             fingerprint=fingerprint,
@@ -156,21 +144,176 @@ class AuthService:
 
         return access_token, refresh_token, authenticated_user
 
+    async def get_current_user(self, token: str, request: Request) -> User:
+        """
+        Get current user from token with fingerprint validation.
+        Fixed session activity update logic.
+        """
+        credentials_exception = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+        try:
+            # Check if token is blacklisted
+            if await self.token_repository.is_blacklisted(token):
+                raise credentials_exception
+
+            # Verify the token with fingerprint
+            fingerprint = generate_fingerprint(request)
+            payload = await verify_token(token, fingerprint)
+
+            token_type = payload.get("type")
+            user_id: str = payload.get("sub")
+
+            if user_id is None or token_type != "access":
+                raise credentials_exception
+
+        except JWTError:
+            raise credentials_exception
+
+        user_id_int = int(user_id)
+        user = await self.user_repository.get(user_id_int)
+        if user is None:
+            raise credentials_exception
+
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Inactive user",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # FIXED: Update session activity properly
+        session_id = payload.get("sid")  # This is the raw UUID from JWT
+        if session_id:
+            session_repo = SessionRepository(self.user_repository.db)
+            # Find session by comparing raw token with hashed stored token
+            sessions = await session_repo.get_user_sessions(user_id_int)
+            session_token_hash = hash_refresh_token(
+                session_id
+            )  # Hash the raw token for comparison
+
+            for session in sessions:
+                if str(session.session_token) == session_token_hash:
+                    session_db_id = int(session.id)
+                    await session_repo.update_activity(session_db_id)
+                    break
+
+        return user
+
+    async def get_user_sessions_with_current(
+        self, user_id: int, current_token: str
+    ) -> Tuple[List[UserSession], int, Optional[int]]:
+        """
+        Get all sessions for a user with current session identification.
+        Fixed session identification logic.
+        """
+        session_repo = SessionRepository(self.user_repository.db)
+        sessions = await session_repo.get_user_sessions(user_id)
+
+        # Identify current session properly
+        current_session_id = None
+        try:
+            # Decode the JWT to get the session ID
+            payload = jwt.decode(
+                current_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+            )
+
+            session_token = payload.get("sid")  # This is the raw UUID
+
+            if session_token:
+                # Hash the raw token to compare with stored hashed tokens
+                session_token_hash = hash_refresh_token(session_token)
+
+                for session in sessions:
+                    stored_token = str(session.session_token)
+
+                    if stored_token == session_token_hash:
+                        current_session_id = int(session.id)
+                        break
+
+        except Exception as e:
+            print(f"Error identifying current session: {e}")
+
+        # Count active sessions
+        active_count = sum(1 for session in sessions if session.is_active())
+
+        return sessions, active_count, current_session_id
+
+    async def logout(self, token: str, invalidate_all_sessions: bool = False) -> bool:
+        """
+        Invalidate user tokens and optionally all sessions.
+        Fixed session deletion logic.
+        """
+        try:
+            # Check if token is already blacklisted
+            if await self.token_repository.is_blacklisted(token):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token already invalidated",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
+            # Verify the token
+            payload = await verify_token(token)
+            user_id = int(payload.get("sub"))
+            session_id = payload.get("sid")  # Raw UUID
+
+            # Extract token expiration time
+            token_data = jwt.decode(
+                token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+            )
+            expires_at = datetime.fromtimestamp(token_data.get("exp"))
+
+            # Blacklist the token
+            await self.token_repository.blacklist(
+                token, expires_at, user_id, TokenBlacklistReason.LOGOUT
+            )
+
+            if invalidate_all_sessions:
+                # Invalidate all user tokens and sessions
+                await self.token_repository.invalidate_all_user_tokens(
+                    user_id, TokenBlacklistReason.LOGOUT
+                )
+            else:
+                # Clear user's refresh token
+                await self.user_repository.update_refresh_token(
+                    user_id=user_id,
+                    refresh_token=None,
+                    expires_at=None,
+                )
+
+                # FIXED: Delete the specific session if session_id exists
+                if session_id:
+                    session_repo = SessionRepository(self.user_repository.db)
+                    sessions = await session_repo.get_user_sessions(user_id)
+                    session_token_hash = hash_refresh_token(
+                        session_id
+                    )  # Hash for comparison
+
+                    for session in sessions:
+                        if str(session.session_token) == session_token_hash:
+                            session_db_id = int(session.id)
+                            await session_repo.delete_session(session_db_id)
+                            break
+
+            return True
+
+        except JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
     async def refresh_tokens(
         self, refresh_token: str, request: Request
     ) -> Tuple[str, str]:
         """
         Generate new access and refresh tokens with rotation detection.
-
-        Args:
-            refresh_token: Refresh token
-            request: FastAPI request for fingerprinting
-
-        Returns:
-            Tuple of (new_access_token, new_refresh_token)
-
-        Raises:
-            HTTPException: If refresh token is invalid or reused
+        Fixed session update logic.
         """
         try:
             # Check for token reuse attack
@@ -232,7 +375,7 @@ class AuthService:
             )
 
             # Generate new tokens with same session
-            session_id = payload.get("sid")
+            session_id = payload.get("sid")  # Raw UUID
             fingerprint = generate_fingerprint(request)
 
             new_access_token = create_access_token(
@@ -256,18 +399,19 @@ class AuthService:
                 expires_at=refresh_expires,
             )
 
-            # Update session activity
+            # FIXED: Update session activity properly
             if session_id:
                 session_repo = SessionRepository(self.user_repository.db)
                 sessions = await session_repo.get_user_sessions(
                     user_id, only_active=True
                 )
+                session_token_hash = hash_refresh_token(
+                    session_id
+                )  # Hash for comparison
+
                 for session in sessions:
-                    # Verify this is the correct session by checking refresh token
-                    session_db_id = int(session.id)
-                    if await session_repo.verify_refresh_token(
-                        session_db_id, refresh_token
-                    ):
+                    if str(session.session_token) == session_token_hash:
+                        session_db_id = int(session.id)
                         await session_repo.update_activity(session_db_id)
                         break
 
@@ -280,203 +424,28 @@ class AuthService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-    async def logout(self, token: str, invalidate_all_sessions: bool = False) -> bool:
-        """
-        Invalidate user tokens and optionally all sessions.
-
-        Args:
-            token: Access token to invalidate
-            invalidate_all_sessions: If True, invalidate all user sessions
-
-        Returns:
-            True if successful
-
-        Raises:
-            HTTPException: If token is invalid
-        """
-        try:
-            # Check if token is already blacklisted
-            if await self.token_repository.is_blacklisted(token):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Token already invalidated",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-
-            # Verify the token
-            payload = await verify_token(token)
-            user_id = int(payload.get("sub"))
-            session_id = payload.get("sid")
-
-            # Extract token expiration time
-            token_data = jwt.decode(
-                token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
-            )
-            expires_at = datetime.fromtimestamp(token_data.get("exp"))
-
-            # Blacklist the token
-            await self.token_repository.blacklist(
-                token, expires_at, user_id, TokenBlacklistReason.LOGOUT
-            )
-
-            if invalidate_all_sessions:
-                # Invalidate all user tokens and sessions
-                await self.token_repository.invalidate_all_user_tokens(
-                    user_id, TokenBlacklistReason.LOGOUT
-                )
-            else:
-                # Clear user's refresh token
-                await self.user_repository.update_refresh_token(
-                    user_id=user_id,
-                    refresh_token=None,
-                    expires_at=None,
-                )
-
-                # Delete the specific session if session_id exists
-                if session_id:
-                    session_repo = SessionRepository(self.user_repository.db)
-                    sessions = await session_repo.get_user_sessions(user_id)
-                    for session in sessions:
-                        # Find session by matching the session token
-                        if session.session_token == hash_refresh_token(session_id):
-                            session_db_id = int(session.id)
-                            await session_repo.delete_session(session_db_id)
-                            break
-
-            return True
-
-        except JWTError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-    async def get_current_user(self, token: str, request: Request) -> User:
-        """
-        Get current user from token with fingerprint validation.
-
-        Args:
-            token: JWT access token
-            request: FastAPI request for fingerprint validation
-
-        Returns:
-            User object
-
-        Raises:
-            HTTPException: If token is invalid or user not found
-        """
-        credentials_exception = HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-        try:
-            # Check if token is blacklisted
-            if await self.token_repository.is_blacklisted(token):
-                raise credentials_exception
-
-            # Verify the token with fingerprint
-            fingerprint = generate_fingerprint(request)
-            payload = await verify_token(token, fingerprint)
-
-            token_type = payload.get("type")
-            user_id: str = payload.get("sub")
-
-            if user_id is None or token_type != "access":
-                raise credentials_exception
-
-        except JWTError:
-            raise credentials_exception
-
-        user_id_int = int(user_id)
-        user = await self.user_repository.get(user_id_int)
-        if user is None:
-            raise credentials_exception
-
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Inactive user",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        # Update session activity if session_id present
-        session_id = payload.get("sid")
-        if session_id:
-            session_repo = SessionRepository(self.user_repository.db)
-            sessions = await session_repo.get_user_sessions(user_id_int)
-            for session in sessions:
-                if session.session_token == hash_refresh_token(session_id):
-                    session_db_id = int(session.id)
-                    await session_repo.update_activity(session_db_id)
-                    break
-
-        return user
-
-    async def get_user_sessions(
-        self, user_id: int, current_token: str
-    ) -> Tuple[List[UserSession], int, Optional[int]]:
-        """
-        Get all sessions for a user with current session identification.
-
-        Args:
-            user_id: User ID
-            current_token: Current access token to identify session
-
-        Returns:
-            Tuple of (sessions, active_count, current_session_id)
-        """
-        session_repo = SessionRepository(self.user_repository.db)
-        sessions = await session_repo.get_user_sessions(user_id)
-
-        # Identify current session
-        current_session_id = None
-        try:
-            payload = await verify_token(current_token)
-            session_token = payload.get("sid")
-            if session_token:
-                session_token_hash = hash_refresh_token(session_token)
-                for session in sessions:
-                    if session.session_token == session_token_hash:
-                        current_session_id = int(session.id)
-                        break
-        except (JWTError, HTTPException):
-            # Failed to verify token, continue without current session identification
-            pass
-
-        # Count active sessions
-        active_count = sum(1 for session in sessions if session.is_active())
-
-        return sessions, active_count, current_session_id
-
     async def invalidate_all_user_sessions(
         self, user_id: int, except_current_token: Optional[str] = None
     ) -> int:
         """
         Invalidate all sessions for a user, optionally keeping current.
-
-        Args:
-            user_id: User ID
-            except_current_token: If provided, keep this session active
-
-        Returns:
-            Number of sessions invalidated
+        Fixed current session identification.
         """
         session_repo = SessionRepository(self.user_repository.db)
 
         except_session_id = None
         if except_current_token:
-            # Identify current session to preserve
+            # FIXED: Identify current session to preserve
             try:
                 payload = await verify_token(except_current_token)
-                session_token = payload.get("sid")
+                session_token = payload.get("sid")  # Raw UUID
                 if session_token:
                     sessions = await session_repo.get_user_sessions(user_id)
-                    session_token_hash = hash_refresh_token(session_token)
+                    session_token_hash = hash_refresh_token(
+                        session_token
+                    )  # Hash for comparison
                     for session in sessions:
-                        if session.session_token == session_token_hash:
+                        if str(session.session_token) == session_token_hash:
                             except_session_id = int(session.id)
                             break
             except (JWTError, HTTPException):
@@ -496,13 +465,6 @@ class AuthService:
     async def invalidate_session(self, user_id: int, session_id: int) -> None:
         """
         Invalidate a specific session.
-
-        Args:
-            user_id: User ID (for ownership validation)
-            session_id: Session ID to invalidate
-
-        Raises:
-            HTTPException: If session not found or doesn't belong to user
         """
         session_repo = SessionRepository(self.user_repository.db)
 

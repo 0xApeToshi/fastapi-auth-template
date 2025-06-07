@@ -263,8 +263,10 @@ async def get_user_sessions(
     """
     # Extract values explicitly to avoid SQLAlchemy Column type issues
     user_id = getattr(current_user, "id")
-    sessions, active_count, current_session_id = await auth_service.get_user_sessions(
-        user_id, token
+
+    # Use the renamed method
+    sessions, active_count, current_session_id = (
+        await auth_service.get_user_sessions_with_current(user_id, token)
     )
 
     session_infos = []

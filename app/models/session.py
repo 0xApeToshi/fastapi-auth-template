@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.sql import func
@@ -43,8 +43,15 @@ class UserSession(Base):
 
     def is_expired(self) -> bool:
         """Check if the session has expired."""
-        current_time = datetime.utcnow()
+        # Use timezone-aware datetime for comparison
+        current_time = datetime.now(timezone.utc)
         expires_at = getattr(self, "expires_at")
+
+        # Ensure expires_at is timezone-aware
+        if expires_at.tzinfo is None:
+            # If expires_at is naive, assume it's UTC
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+
         return bool(current_time > expires_at)
 
     def is_active(self) -> bool:

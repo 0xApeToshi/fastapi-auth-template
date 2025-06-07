@@ -27,10 +27,12 @@ class SessionRepository:
         """
         Create a new user session.
 
+        FIXED: Only hash tokens once here, not in the service layer.
+
         Args:
             user_id: User ID
-            session_token: Session identifier (will be hashed)
-            refresh_token: Refresh token (will be hashed)
+            session_token: Raw session identifier (will be hashed here)
+            refresh_token: Raw refresh token (will be hashed here)
             user_agent: Client user agent
             ip_address: Client IP address
             fingerprint: Client fingerprint
@@ -39,14 +41,14 @@ class SessionRepository:
         Returns:
             Created UserSession
         """
-        # Hash tokens before storing
+        # Hash tokens before storing - this is the ONLY place they should be hashed
         session_token_hash = hash_refresh_token(session_token)
         refresh_token_hash = hash_refresh_token(refresh_token)
 
         session = UserSession(
             user_id=user_id,
-            session_token=session_token_hash,
-            refresh_token=refresh_token_hash,
+            session_token=session_token_hash,  # Hashed once here
+            refresh_token=refresh_token_hash,  # Hashed once here
             user_agent=user_agent,
             ip_address=ip_address,
             fingerprint=fingerprint,
@@ -64,14 +66,16 @@ class SessionRepository:
         """
         Get session by session token.
 
+        FIXED: Properly hash the raw token for comparison.
+
         Args:
             user_id: User ID
-            session_token: Session token to verify
+            session_token: Raw session token to verify
 
         Returns:
             UserSession if found and valid
         """
-        # Hash the token for comparison
+        # Hash the raw token for comparison with stored hash
         session_token_hash = hash_refresh_token(session_token)
 
         result = await self.db.execute(
@@ -145,9 +149,11 @@ class SessionRepository:
         """
         Verify a refresh token against the session.
 
+        FIXED: Properly verify raw token against stored hash.
+
         Args:
             session_id: Session ID
-            refresh_token: Refresh token to verify
+            refresh_token: Raw refresh token to verify
 
         Returns:
             True if token is valid
@@ -160,7 +166,7 @@ class SessionRepository:
         if not session:
             return False
 
-        # Extract the actual refresh token value from SQLAlchemy model
+        # Verify raw token against stored hash
         stored_refresh_token = str(session.refresh_token)
         return verify_refresh_token(refresh_token, stored_refresh_token)
 

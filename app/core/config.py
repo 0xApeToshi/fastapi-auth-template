@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "User Management API"
 
+    # ENVIRONMENT
+    ENVIRONMENT: str = "development"  # development, staging, production
+
     # SECURITY
     SECRET_KEY: str  # Required, will raise error if not in environment
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30  # 30 minutes
@@ -16,8 +19,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
 
     # HTTPS and Cookie Security
-    HTTPS_REDIRECT: bool = True  # Redirect HTTP to HTTPS
-    SECURE_COOKIES: bool = True  # Use secure cookies in production
+    HTTPS_REDIRECT: bool = False  # Default to False for development
+    SECURE_COOKIES: bool = False  # Default to False for development
 
     # Session Management
     MAX_CONCURRENT_SESSIONS: int = 5  # Maximum concurrent sessions per user
@@ -133,12 +136,14 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_security_settings(self) -> "Settings":
         """Validate security settings for production."""
-        if not self.TESTING:
-            # In production, ensure secure defaults
+        # Only enforce strict security in production environment
+        if self.ENVIRONMENT == "production":
             if not self.HTTPS_REDIRECT:
-                raise ValueError("HTTPS_REDIRECT should be True in production")
+                raise ValueError("HTTPS_REDIRECT must be True in production")
             if not self.SECURE_COOKIES:
-                raise ValueError("SECURE_COOKIES should be True in production")
+                raise ValueError("SECURE_COOKIES must be True in production")
+            if self.SECRET_KEY in ["your-super-secret-key-change-this-in-production"]:
+                raise ValueError("Must change default SECRET_KEY in production")
         return self
 
     class Config:

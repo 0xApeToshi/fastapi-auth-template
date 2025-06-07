@@ -1,4 +1,4 @@
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import (
@@ -129,15 +129,13 @@ async def get_token_from_bearer(
 
 # Support both OAuth2 password flow and explicit HTTP Bearer tokens
 async def get_token(
-    oauth2_token: Optional[str] = Depends(oauth2_scheme),
-    bearer_token: Optional[str] = None,
+    oauth2_token: Annotated[str, Depends(oauth2_scheme)],
 ) -> str:
     """
-    Get token from either OAuth2 or HTTP Bearer authentication.
+    Get token from OAuth2 authentication.
 
     Args:
         oauth2_token: Token from OAuth2 authentication
-        bearer_token: Token from HTTP Bearer authentication
 
     Returns:
         JWT token
@@ -145,15 +143,7 @@ async def get_token(
     Raises:
         HTTPException: If no token is provided
     """
-    if bearer_token:
-        return bearer_token
-    if oauth2_token:
-        return oauth2_token
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Not authenticated",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+    return oauth2_token
 
 
 async def get_current_user(
