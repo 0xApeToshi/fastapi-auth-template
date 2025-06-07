@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from pydantic import AnyHttpUrl, PostgresDsn, field_validator, model_validator
 from pydantic_settings import BaseSettings
@@ -21,16 +21,26 @@ class Settings(BaseSettings):
     ARGON2_HASH_LENGTH: int = 16
     ARGON2_SALT_LENGTH: int = 16
 
-    # CORS
-    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
+    # CORS - Changed to str to avoid JSON parsing issues
+    BACKEND_CORS_ORIGINS: str = ""
 
-    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
-    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
-            return v
-        raise ValueError(v)
+    @field_validator("BACKEND_CORS_ORIGINS", mode="after")
+    def assemble_cors_origins(cls, v: str) -> List[AnyHttpUrl]:
+        """Parse CORS origins from string to list of URLs."""
+        if not v:
+            return []
+        
+        # Handle both comma-separated and JSON array formats
+        if v.startswith("[") and v.endswith("]"):
+            # JSON array format: ["http://localhost:3000", "http://localhost:8000"]
+            import json
+            origins = json.loads(v)
+        else:
+            # Comma-separated format: http://localhost:3000,http://localhost:8000
+            origins = [origin.strip() for origin in v.split(",") if origin.strip()]
+        
+        # Convert to AnyHttpUrl objects
+        return [AnyHttpUrl(origin) for origin in origins]
 
     # DATABASE - Support both combined and separate host/port formats
     # Combined format (original)
