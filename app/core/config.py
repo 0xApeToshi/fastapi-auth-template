@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: str = ""
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="after")
+    @classmethod
     def assemble_cors_origins(cls, v: str) -> List[AnyHttpUrl]:
         """Parse CORS origins from string to list of URLs."""
         if not v:
@@ -95,4 +96,16 @@ class Settings(BaseSettings):
         extra = "ignore"  # Allow extra fields in settings
 
 
-settings = Settings()
+# Create a default settings instance that can be imported
+# This will use environment variables or .env file
+try:
+    settings = Settings()  # type: ignore[call-arg]
+except Exception:
+    # For testing or when env vars are not set, create a dummy instance
+    # This will be overridden by test configurations
+    settings = Settings(
+        SECRET_KEY="test-secret-key",
+        POSTGRES_USER="test",
+        POSTGRES_PASSWORD="test",
+        POSTGRES_DB="test",
+    )  # type: ignore[call-arg]

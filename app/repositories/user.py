@@ -52,7 +52,7 @@ class UserRepository:
             List of User objects
         """
         result = await self.db.execute(select(User).offset(skip).limit(limit))
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     async def create(self, user_create: UserCreate, hashed_password: str) -> User:
         """

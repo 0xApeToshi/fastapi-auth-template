@@ -88,7 +88,6 @@ jobs:
     - name: Run type checking with mypy
       run: |
         mypy app/ --ignore-missing-imports --no-strict-optional --explicit-package-bases
-      continue-on-error: true  # Don't fail CI for mypy issues
     
     - name: Run tests with pytest
       run: |

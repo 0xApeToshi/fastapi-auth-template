@@ -1,3 +1,5 @@
+from typing import Any, Dict
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
@@ -16,7 +18,7 @@ app = FastAPI(
 
 
 # Custom OpenAPI schema with better JWT documentation
-def custom_openapi():
+def custom_openapi() -> Dict[str, Any]:
     if app.openapi_schema:
         return app.openapi_schema
 
@@ -61,7 +63,7 @@ def custom_openapi():
     return app.openapi_schema
 
 
-app.openapi = custom_openapi
+app.openapi = custom_openapi  # type: ignore[method-assign]
 
 # Set all CORS enabled origins
 if settings.BACKEND_CORS_ORIGINS:
@@ -77,5 +79,5 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> Dict[str, str]:
     return {"status": "healthy"}

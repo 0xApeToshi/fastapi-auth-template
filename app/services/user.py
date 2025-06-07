@@ -61,7 +61,7 @@ class UserService:
         user = await self.get_by_email(email)
         if not user:
             return None
-        if not verify_password(password, user.hashed_password):
+        if not verify_password(password, str(user.hashed_password)):
             return None
         return user
 

@@ -1,4 +1,5 @@
 import enum
+from typing import Optional
 
 from sqlalchemy import Boolean, Column, DateTime, Enum, Integer, String, Text
 from sqlalchemy.sql import func
@@ -21,7 +22,9 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
-    role = Column(Enum(UserRole), default=UserRole.REGULAR, nullable=False)
+    role: Column[UserRole] = Column(
+        Enum(UserRole), default=UserRole.REGULAR, nullable=False
+    )
 
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(

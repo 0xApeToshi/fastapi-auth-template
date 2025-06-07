@@ -83,7 +83,7 @@ async def update_current_user_profile(
             detail="Cannot change your own role",
         )
 
-    return await user_service.update(current_user.id, user_in)
+    return await user_service.update(int(current_user.id), user_in)
 
 
 @router.get("/", response_model=List[UserSchema])

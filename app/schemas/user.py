@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.models.user import UserRole
 
@@ -19,8 +19,9 @@ class UserCreate(UserBase):
 
     password: str = Field(..., min_length=8)
 
-    @validator("password")
-    def password_strength(cls, v):
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
         # Add password strength validation here if needed
         if len(v) < 8:
             raise ValueError("Password must be at least 8 characters long")
@@ -35,8 +36,9 @@ class UserUpdate(BaseModel):
     role: Optional[UserRole] = None
     password: Optional[str] = Field(None, min_length=8)
 
-    @validator("password")
-    def password_strength(cls, v):
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v: Optional[str]) -> Optional[str]:
         if v is not None and len(v) < 8:
             raise ValueError("Password must be at least 8 characters long")
         return v

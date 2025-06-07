@@ -62,7 +62,7 @@ class AuthService:
             days=settings.REFRESH_TOKEN_EXPIRE_DAYS
         )
         await self.user_repository.update_refresh_token(
-            user_id=user.id,
+            user_id=int(user.id),
             refresh_token=refresh_token,
             expires_at=refresh_expires,
         )
