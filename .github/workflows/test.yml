@@ -81,13 +81,13 @@ jobs:
     - name: Run linting with flake8
       run: |
         # Stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --config=.flake8
         # Exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics --config=.flake8
     
     - name: Run type checking with mypy
       run: |
-        mypy app/ --ignore-missing-imports --no-strict-optional
+        mypy app/ --ignore-missing-imports --no-strict-optional --explicit-package-bases
       continue-on-error: true  # Don't fail CI for mypy issues
     
     - name: Run tests with pytest
