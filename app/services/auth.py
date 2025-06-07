@@ -57,13 +57,13 @@ class AuthService:
         access_token = create_access_token(user.id)
         refresh_token = create_refresh_token(user.id)
 
-        # Store refresh token in the database
+        # Store refresh token hash in the database
         refresh_expires = datetime.utcnow() + timedelta(
             days=settings.REFRESH_TOKEN_EXPIRE_DAYS
         )
         await self.user_repository.update_refresh_token(
             user_id=int(user.id),
-            refresh_token=refresh_token,
+            refresh_token=refresh_token,  # This will be hashed in the repository
             expires_at=refresh_expires,
         )
 
@@ -105,8 +105,10 @@ class AuthService:
                     headers={"WWW-Authenticate": "Bearer"},
                 )
 
-            # Verify token matches stored token
-            if user.refresh_token != refresh_token:
+            # Verify token matches stored token hash
+            if not await self.user_repository.verify_refresh_token(
+                user_id, refresh_token
+            ):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid refresh token",
@@ -125,13 +127,13 @@ class AuthService:
             new_access_token = create_access_token(user_id)
             new_refresh_token = create_refresh_token(user_id)
 
-            # Update stored refresh token
+            # Update stored refresh token hash
             refresh_expires = datetime.utcnow() + timedelta(
                 days=settings.REFRESH_TOKEN_EXPIRE_DAYS
             )
             await self.user_repository.update_refresh_token(
                 user_id=user_id,
-                refresh_token=new_refresh_token,
+                refresh_token=new_refresh_token,  # will be hashed in the repository
                 expires_at=refresh_expires,
             )
 

@@ -8,7 +8,7 @@ async def create_test_user(
     db: AsyncSession,
     *,
     email: str,
-    password: str,
+    password: str = "TestPass1234!",
     role: UserRole = UserRole.REGULAR,
     is_active: bool = True,
 ) -> User:
@@ -18,7 +18,7 @@ async def create_test_user(
     Args:
         db: Database session
         email: User email
-        password: Plain text password
+        password: Plain text password (default meets new requirements)
         role: User role
         is_active: Whether the user is active
 
@@ -66,6 +66,9 @@ async def get_user_auth_headers(
         f"{api_prefix}/auth/login",
         data=login_data,
     )
-    tokens = response.json()
 
+    if response.status_code != 200:
+        raise Exception(f"Login failed: {response.status_code} - {response.text}")
+
+    tokens = response.json()
     return {"Authorization": f"Bearer {tokens['access_token']}"}

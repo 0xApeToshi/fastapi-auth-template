@@ -12,7 +12,7 @@ async def test_create_user(client: AsyncClient, test_db):
     """Test user creation endpoint."""
     user_data = {
         "email": "newuser@example.com",
-        "password": "password123",
+        "password": "NewUserPass123!",
         "is_active": True,
         "role": "regular",
     }
@@ -41,7 +41,7 @@ async def test_create_user_duplicate_email(client: AsyncClient, test_db):
     # Create first user
     user_data = {
         "email": "duplicate@example.com",
-        "password": "password123",
+        "password": "DuplicatePass123!",
     }
     await create_test_user(test_db, **user_data)
 
@@ -61,7 +61,7 @@ async def test_create_user_invalid_email(client: AsyncClient, test_db):
     """Test creating user with invalid email."""
     user_data = {
         "email": "invalid-email",
-        "password": "password123",
+        "password": "ValidPass123!",
     }
 
     response = await client.post(
@@ -77,7 +77,23 @@ async def test_create_user_short_password(client: AsyncClient, test_db):
     """Test creating user with short password."""
     user_data = {
         "email": "shortpass@example.com",
-        "password": "123",  # Too short
+        "password": "Short1!",  # Still too short (7 chars, need 12+)
+    }
+
+    response = await client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=user_data,
+    )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_create_user_weak_password(client: AsyncClient, test_db):
+    """Test creating user with weak password (no complexity)."""
+    user_data = {
+        "email": "weakpass@example.com",
+        "password": "simplepassword123",  # No uppercase or special chars
     }
 
     response = await client.post(
@@ -93,7 +109,7 @@ async def test_create_user_admin_role(client: AsyncClient, test_db):
     """Test creating user with admin role."""
     user_data = {
         "email": "admin@example.com",
-        "password": "password123",
+        "password": "AdminPass123!",
         "role": "admin",
     }
 
@@ -113,7 +129,7 @@ async def test_get_current_user_profile(client: AsyncClient, test_db):
     # Create a test user
     user_data = {
         "email": "profile@example.com",
-        "password": "password123",
+        "password": "ProfilePass123!",
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
@@ -150,7 +166,7 @@ async def test_update_current_user_profile(client: AsyncClient, test_db):
     # Create a test user
     user_data = {
         "email": "update@example.com",
-        "password": "password123",
+        "password": "UpdatePass123!",
         "role": UserRole.REGULAR,
     }
     user = await create_test_user(test_db, **user_data)  # noqa
@@ -161,7 +177,7 @@ async def test_update_current_user_profile(client: AsyncClient, test_db):
     )
 
     # Update user profile
-    update_data = {"email": "updated@example.com", "password": "newpassword123"}
+    update_data = {"email": "updated@example.com", "password": "NewUpdatePass123!"}
     response = await client.put(
         f"{settings.API_V1_STR}/users/me",
         json=update_data,
@@ -193,7 +209,7 @@ async def test_update_current_user_role_forbidden(client: AsyncClient, test_db):
     # Create a test user
     user_data = {
         "email": "role_change@example.com",
-        "password": "password123",
+        "password": "RoleChangePass123!",
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
@@ -222,7 +238,7 @@ async def test_list_users_admin(client: AsyncClient, test_db):
     # Create admin user
     admin_data = {
         "email": "admin@example.com",
-        "password": "password123",
+        "password": "AdminPass123!",
         "role": UserRole.ADMIN,
     }
     await create_test_user(test_db, **admin_data)
@@ -232,7 +248,7 @@ async def test_list_users_admin(client: AsyncClient, test_db):
         await create_test_user(
             test_db,
             email=f"user{i}@example.com",
-            password="password123",
+            password="UserPass123!",
             role=UserRole.REGULAR,
         )
 
@@ -269,7 +285,7 @@ async def test_list_users_regular_user_forbidden(client: AsyncClient, test_db):
     # Create regular user
     user_data = {
         "email": "regular@example.com",
-        "password": "password123",
+        "password": "RegularPass123!",
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
@@ -294,7 +310,7 @@ async def test_get_user_by_id_admin(client: AsyncClient, test_db):
     # Create admin user
     admin_data = {
         "email": "admin@example.com",
-        "password": "password123",
+        "password": "AdminPass123!",
         "role": UserRole.ADMIN,
     }
     await create_test_user(test_db, **admin_data)
@@ -303,7 +319,7 @@ async def test_get_user_by_id_admin(client: AsyncClient, test_db):
     target_user = await create_test_user(
         test_db,
         email="target@example.com",
-        password="password123",
+        password="TargetPass123!",
         role=UserRole.REGULAR,
     )
 
@@ -330,7 +346,7 @@ async def test_get_user_by_id_not_found(client: AsyncClient, test_db):
     # Create admin user
     admin_data = {
         "email": "admin@example.com",
-        "password": "password123",
+        "password": "AdminPass123!",
         "role": UserRole.ADMIN,
     }
     await create_test_user(test_db, **admin_data)
@@ -355,7 +371,7 @@ async def test_update_user_admin(client: AsyncClient, test_db):
     # Create admin user
     admin_data = {
         "email": "admin@example.com",
-        "password": "password123",
+        "password": "AdminPass123!",
         "role": UserRole.ADMIN,
     }
     await create_test_user(test_db, **admin_data)
@@ -364,7 +380,7 @@ async def test_update_user_admin(client: AsyncClient, test_db):
     target_user = await create_test_user(
         test_db,
         email="target@example.com",
-        password="password123",
+        password="TargetPass123!",
         role=UserRole.REGULAR,
     )
 
@@ -398,7 +414,7 @@ async def test_delete_user_admin(client: AsyncClient, test_db):
     # Create admin user
     admin_data = {
         "email": "admin@example.com",
-        "password": "password123",
+        "password": "AdminPass123!",
         "role": UserRole.ADMIN,
     }
     await create_test_user(test_db, **admin_data)
@@ -407,7 +423,7 @@ async def test_delete_user_admin(client: AsyncClient, test_db):
     target_user = await create_test_user(
         test_db,
         email="target@example.com",
-        password="password123",
+        password="TargetPass123!",
         role=UserRole.REGULAR,
     )
 
@@ -440,7 +456,7 @@ async def test_delete_user_not_found(client: AsyncClient, test_db):
     # Create admin user
     admin_data = {
         "email": "admin@example.com",
-        "password": "password123",
+        "password": "AdminPass123!",
         "role": UserRole.ADMIN,
     }
     await create_test_user(test_db, **admin_data)
@@ -465,7 +481,7 @@ async def test_admin_operations_regular_user_forbidden(client: AsyncClient, test
     # Create regular user
     user_data = {
         "email": "regular@example.com",
-        "password": "password123",
+        "password": "RegularPass123!",
         "role": UserRole.REGULAR,
     }
     user = await create_test_user(test_db, **user_data)  # noqa
@@ -474,7 +490,7 @@ async def test_admin_operations_regular_user_forbidden(client: AsyncClient, test
     target_user = await create_test_user(
         test_db,
         email="target@example.com",
-        password="password123",
+        password="TargetPass123!",
         role=UserRole.REGULAR,
     )
 
@@ -513,7 +529,7 @@ async def test_pagination_parameters(client: AsyncClient, test_db):
     # Create admin user
     admin_data = {
         "email": "admin@example.com",
-        "password": "password123",
+        "password": "AdminPass123!",
         "role": UserRole.ADMIN,
     }
     await create_test_user(test_db, **admin_data)

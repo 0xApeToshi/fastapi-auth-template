@@ -49,7 +49,7 @@ class UserService:
 
     async def authenticate(self, email: str, password: str) -> Optional[User]:
         """
-        Authenticate a user.
+        Authenticate a user with constant-time operations to prevent timing attacks.
 
         Args:
             email: User email
@@ -59,11 +59,18 @@ class UserService:
             User object if authentication successful, None otherwise
         """
         user = await self.get_by_email(email)
-        if not user:
-            return None
-        if not verify_password(password, str(user.hashed_password)):
-            return None
-        return user
+
+        # Always perform password verification to prevent timing attacks
+        if user:
+            password_valid = verify_password(password, str(user.hashed_password))
+            if password_valid and user.is_active:
+                return user
+        else:
+            # Perform dummy hash operation to maintain constant timing
+            # This prevents timing attacks that could reveal user existence
+            get_password_hash("dummy_password_to_maintain_timing")
+
+        return None
 
     async def list(self, skip: int = 0, limit: int = 100) -> List[User]:
         """

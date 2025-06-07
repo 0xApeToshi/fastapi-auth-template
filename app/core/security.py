@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, Union
 
-from jose import jwt
+from fastapi import HTTPException, status
+from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from app.core.config import settings
@@ -99,9 +100,36 @@ def get_password_hash(password: str) -> str:
     return hashed
 
 
+def hash_refresh_token(refresh_token: str) -> str:
+    """
+    Hash a refresh token for secure storage.
+
+    Args:
+        refresh_token: Refresh token to hash
+
+    Returns:
+        Hashed refresh token
+    """
+    return get_password_hash(refresh_token)
+
+
+def verify_refresh_token(provided_token: str, stored_hash: str) -> bool:
+    """
+    Verify a refresh token against its stored hash.
+
+    Args:
+        provided_token: Refresh token provided by client
+        stored_hash: Stored hash of the refresh token
+
+    Returns:
+        True if tokens match
+    """
+    return verify_password(provided_token, stored_hash)
+
+
 async def verify_token(token: str) -> Dict[str, Any]:
     """
-    Decode and verify a JWT token.
+    Decode and verify a JWT token with enhanced security.
 
     Args:
         token: JWT token to verify
@@ -110,9 +138,35 @@ async def verify_token(token: str) -> Dict[str, Any]:
         Token payload if valid
 
     Raises:
-        JWTError: If token is invalid
+        HTTPException: If token is invalid
     """
-    payload: Dict[str, Any] = jwt.decode(
-        token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
-    )
-    return payload
+    try:
+        # Parse header first to verify algorithm
+        unverified_header = jwt.get_unverified_header(token)
+        if unverified_header.get("alg") != settings.ALGORITHM:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token algorithm",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Verify with strict algorithm enforcement and required claims
+        payload: Dict[str, Any] = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            options={
+                "verify_signature": True,
+                "require": ["exp", "sub", "type"],
+                "verify_exp": True,
+                "verify_sub": True,
+            },
+        )
+        return payload
+
+    except JWTError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from e

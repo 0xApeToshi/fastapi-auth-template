@@ -1,3 +1,4 @@
+import secrets
 from typing import List, Optional
 
 from pydantic import AnyHttpUrl, PostgresDsn, field_validator, model_validator
@@ -21,8 +22,29 @@ class Settings(BaseSettings):
     ARGON2_HASH_LENGTH: int = 16
     ARGON2_SALT_LENGTH: int = 16
 
+    # Rate Limiting Configuration
+    RATE_LIMIT_LOGIN: str = "5/minute"  # Login attempts per minute per IP
+    RATE_LIMIT_REFRESH: str = "10/minute"  # Token refresh per minute per IP
+    RATE_LIMIT_LOGOUT: str = "20/minute"  # Logout attempts per minute per IP
+    RATE_LIMIT_REGISTER: str = "3/minute"  # User registration per minute per IP
+    RATE_LIMIT_LIST_USERS: str = "30/minute"  # User listing per minute per IP
+    RATE_LIMIT_PASSWORD_RESET: str = "3/minute"  # Password reset per minute per IP
+
+    # Testing flag - when True, rate limiting is disabled
+    TESTING: bool = False
+
     # CORS - Changed to str to avoid JSON parsing issues
     BACKEND_CORS_ORIGINS: str = ""
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        """Validate that the secret key is secure."""
+        if len(v) < 32:
+            raise ValueError("SECRET_KEY must be at least 32 characters long")
+        if v in ["test-secret-key", "your-secret-key", "change-me", "secret"]:
+            raise ValueError("Cannot use default or weak secret key in production")
+        return v
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="after")
     @classmethod
@@ -96,6 +118,11 @@ class Settings(BaseSettings):
         extra = "ignore"  # Allow extra fields in settings
 
 
+def generate_secret_key() -> str:
+    """Generate a cryptographically secure secret key."""
+    return secrets.token_urlsafe(32)  # 256-bit key
+
+
 # Create a default settings instance that can be imported
 # This will use environment variables or .env file
 try:
@@ -103,9 +130,12 @@ try:
 except Exception:
     # For testing or when env vars are not set, create a dummy instance
     # This will be overridden by test configurations
+    # Generate a secure key for testing
+    test_secret_key = generate_secret_key()
     settings = Settings(
-        SECRET_KEY="test-secret-key",
+        SECRET_KEY=test_secret_key,
         POSTGRES_USER="test",
         POSTGRES_PASSWORD="test",
         POSTGRES_DB="test",
+        TESTING=True,  # Enable testing mode by default for fallback
     )  # type: ignore[call-arg]

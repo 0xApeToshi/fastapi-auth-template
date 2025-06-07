@@ -12,10 +12,10 @@ from tests.utils.user import create_test_user
 @pytest.mark.asyncio
 async def test_login(client: AsyncClient, test_db):
     """Test login endpoint."""
-    # Create a test user
+    # Create a test user with compliant password
     user_data = {
         "email": "test@example.com",
-        "password": "password123",
+        "password": "TestPass1234!",
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
@@ -43,7 +43,7 @@ async def test_login_wrong_password(client: AsyncClient, test_db):
     # Create a test user
     user_data = {
         "email": "test2@example.com",
-        "password": "password123",
+        "password": "TestPass1234!",
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
@@ -51,7 +51,7 @@ async def test_login_wrong_password(client: AsyncClient, test_db):
     # Try to login with wrong password
     login_data = {
         "username": user_data["email"],
-        "password": "wrong_password",
+        "password": "WrongPass123!",
     }
     response = await client.post(
         f"{settings.API_V1_STR}/auth/login",
@@ -66,7 +66,7 @@ async def test_login_nonexistent_user(client: AsyncClient, test_db):
     """Test login with non-existent user."""
     login_data = {
         "username": "nonexistent@example.com",
-        "password": "password123",
+        "password": "TestPass1234!",
     }
     response = await client.post(
         f"{settings.API_V1_STR}/auth/login",
@@ -84,13 +84,14 @@ async def test_login_inactive_user(client: AsyncClient, test_db):
     # Create an inactive test user
     user_data = {
         "email": "inactive@example.com",
-        "password": "password123",
+        "password": "TestPass1234!",
         "role": UserRole.REGULAR,
         "is_active": False,
     }
     await create_test_user(test_db, **user_data)
 
-    # Try to login
+    # Try to login - should fail due to constant-time authentication
+    # The new authentication system returns None for inactive users
     login_data = {
         "username": user_data["email"],
         "password": user_data["password"],
@@ -102,7 +103,8 @@ async def test_login_inactive_user(client: AsyncClient, test_db):
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
     data = response.json()
-    assert data["detail"] == "Inactive user"
+    # The constant-time auth now returns generic error for inactive users
+    assert data["detail"] == "Incorrect email or password"
 
 
 @pytest.mark.asyncio
@@ -118,7 +120,7 @@ async def test_login_missing_credentials(client: AsyncClient, test_db):
     # Missing username
     response = await client.post(
         f"{settings.API_V1_STR}/auth/login",
-        data={"password": "password123"},
+        data={"password": "TestPass1234!"},
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
@@ -129,7 +131,7 @@ async def test_refresh_token(client: AsyncClient, test_db):
     # Create a test user
     user_data = {
         "email": "test3@example.com",
-        "password": "password123",
+        "password": "TestPass1234!",
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
@@ -143,6 +145,8 @@ async def test_refresh_token(client: AsyncClient, test_db):
         f"{settings.API_V1_STR}/auth/login",
         data=login_data,
     )
+
+    assert login_response.status_code == 200, f"Login failed: {login_response.text}"
     tokens = login_response.json()
 
     # Add a longer delay to ensure tokens are generated at different times
@@ -182,7 +186,8 @@ async def test_refresh_token_invalid(client: AsyncClient, test_db):
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
     data = response.json()
-    assert data["detail"] == "Invalid refresh token"
+
+    assert data["detail"] == "Invalid token"
 
 
 @pytest.mark.asyncio
@@ -191,7 +196,7 @@ async def test_refresh_token_with_access_token(client: AsyncClient, test_db):
     # Create a test user and login
     user_data = {
         "email": "test_refresh_access@example.com",
-        "password": "password123",
+        "password": "TestPass1234!",
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
@@ -204,6 +209,8 @@ async def test_refresh_token_with_access_token(client: AsyncClient, test_db):
         f"{settings.API_V1_STR}/auth/login",
         data=login_data,
     )
+
+    assert login_response.status_code == 200, f"Login failed: {login_response.text}"
     tokens = login_response.json()
 
     # Try to refresh using access token instead of refresh token
@@ -226,7 +233,7 @@ async def test_refresh_token_reuse_after_refresh(client: AsyncClient, test_db):
     # Create a test user and login
     user_data = {
         "email": "test_reuse@example.com",
-        "password": "password123",
+        "password": "TestPass1234!",
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
@@ -239,6 +246,8 @@ async def test_refresh_token_reuse_after_refresh(client: AsyncClient, test_db):
         f"{settings.API_V1_STR}/auth/login",
         data=login_data,
     )
+
+    assert login_response.status_code == 200, f"Login failed: {login_response.text}"
     original_tokens = login_response.json()
 
     await asyncio.sleep(1.1)
@@ -267,7 +276,7 @@ async def test_logout(client: AsyncClient, test_db):
     # Create a test user
     user_data = {
         "email": "test4@example.com",
-        "password": "password123",
+        "password": "TestPass1234!",
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
@@ -281,6 +290,8 @@ async def test_logout(client: AsyncClient, test_db):
         f"{settings.API_V1_STR}/auth/login",
         data=login_data,
     )
+
+    assert login_response.status_code == 200, f"Login failed: {login_response.text}"
     tokens = login_response.json()
 
     # Logout
@@ -327,7 +338,7 @@ async def test_logout_twice(client: AsyncClient, test_db):
     # Create a test user and login
     user_data = {
         "email": "test_logout_twice@example.com",
-        "password": "password123",
+        "password": "TestPass1234!",
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
@@ -340,6 +351,8 @@ async def test_logout_twice(client: AsyncClient, test_db):
         f"{settings.API_V1_STR}/auth/login",
         data=login_data,
     )
+
+    assert login_response.status_code == 200, f"Login failed: {login_response.text}"
     tokens = login_response.json()
 
     # First logout - should work
@@ -365,7 +378,7 @@ async def test_multiple_logins_different_tokens(client: AsyncClient, test_db):
     # Create a test user
     user_data = {
         "email": "test_multiple@example.com",
-        "password": "password123",
+        "password": "TestPass1234!",
         "role": UserRole.REGULAR,
     }
     await create_test_user(test_db, **user_data)
@@ -380,6 +393,7 @@ async def test_multiple_logins_different_tokens(client: AsyncClient, test_db):
         f"{settings.API_V1_STR}/auth/login",
         data=login_data,
     )
+    assert response1.status_code == 200, f"First login failed: {response1.text}"
     tokens1 = response1.json()
 
     await asyncio.sleep(1.1)  # Ensure different timestamps
@@ -389,6 +403,7 @@ async def test_multiple_logins_different_tokens(client: AsyncClient, test_db):
         f"{settings.API_V1_STR}/auth/login",
         data=login_data,
     )
+    assert response2.status_code == 200, f"Second login failed: {response2.text}"
     tokens2 = response2.json()
 
     # Tokens should be different
